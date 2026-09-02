@@ -24,20 +24,24 @@ object RecentsHideHelper {
     /**
      * Enables exactly one of the two launcher aliases. Pass hidden = true to
      * exclude the app's task from Recents. Uses DONT_KILL_APP so the running
-     * foreground service is not restarted by the switch.
+     * foreground service is not restarted by the switch. The incoming alias
+     * is enabled before the outgoing one is disabled, so there is never a
+     * window with zero enabled launcher entries. Throws if the underlying
+     * PackageManager call fails — callers handle rollback.
      */
     fun apply(context: Context, hidden: Boolean) {
         val pm = context.packageManager
+        val (incoming, outgoing) =
+            if (hidden) hiddenAlias(context) to visibleAlias(context)
+            else visibleAlias(context) to hiddenAlias(context)
         pm.setComponentEnabledSetting(
-            hiddenAlias(context),
-            if (hidden) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            incoming,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
             PackageManager.DONT_KILL_APP
         )
         pm.setComponentEnabledSetting(
-            visibleAlias(context),
-            if (hidden) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            else PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            outgoing,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
             PackageManager.DONT_KILL_APP
         )
     }
@@ -46,8 +50,8 @@ object RecentsHideHelper {
      * Reconciles alias component state with the hideFromRecents preference.
      * Covers drift such as component state surviving an app-data clear, or a
      * partially-applied switch. Safe to call on every app start; it is a no-op
-     * when the states already agree (DEFAULT state counts as the manifest
-     * default, which matches the preference default).
+     * when the states already agree (a fresh install's DEFAULT states are
+     * pinned to explicit states on the first sync).
      */
     fun sync(context: Context) {
         val hidden = PanelPreferences(context).hideFromRecents
@@ -92,15 +96,29 @@ object RecentsHideHelper {
         val hidden = PanelPreferences(activity).hideFromRecents
         val am = activity.getSystemService(android.app.ActivityManager::class.java) ?: return false
         val currentTaskId = activity.taskId
-        val taskExcluded = am.appTasks
-            .firstOrNull { it.taskInfo?.id == currentTaskId }
-            ?.taskInfo?.baseIntent
-            ?.flags?.and(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0
+        val taskExcluded = (
+            am.appTasks.firstOrNull { it.taskInfo?.id == currentTaskId }
+                ?.taskInfo?.baseIntent?.flags ?: 0
+            ).and(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0
         val intentExcluded =
-            activity.intent?.flags?.and(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0
+            (activity.intent?.flags ?: 0).and(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0
         if (hidden == (taskExcluded || intentExcluded)) return false
-        // Drop sibling tasks that still carry the stale flag state.
-        am.appTasks.filter { it.taskInfo?.id != currentTaskId }.forEach { it.finishAndRemoveTask() }
+        // Drop sibling tasks rooted at this app's own launcher entries that
+        // still carry the stale flag state; other tasks (e.g. the shortcut
+        // trampoline) are left alone. Stale AppTask handles can throw once
+        // their task is gone (e.g. during alias-disable teardown), so each
+        // remote call is guarded.
+        val launcherEntrySuffixes =
+            listOf(".MainActivity", ".SetupActivity", ".LauncherHidden", ".LauncherVisible")
+        am.appTasks
+            .filter { it.taskInfo?.id != currentTaskId }
+            .filter {
+                val component = it.taskInfo?.baseIntent?.component
+                component != null &&
+                    component.packageName == activity.packageName &&
+                    launcherEntrySuffixes.any { suffix -> component.className.endsWith(suffix) }
+            }
+            .forEach { runCatching { it.finishAndRemoveTask() } }
         // Root the fresh task at the launcher alias matching the preference:
         // disabling an alias kills tasks rooted at it, so toggling the
         // preference tears down the stale task and the next launch rebuilds
@@ -118,8 +136,11 @@ object RecentsHideHelper {
                 (if (hidden) Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS else 0)
             )
         }
-        activity.startActivity(relaunch)
-        am.appTasks.firstOrNull { it.taskInfo?.id == currentTaskId }?.finishAndRemoveTask()
+        val relaunched = runCatching { activity.startActivity(relaunch) }.isSuccess
+        if (!relaunched) return false
+        runCatching {
+            am.appTasks.firstOrNull { it.taskInfo?.id == currentTaskId }?.finishAndRemoveTask()
+        }
         activity.finish()
         return true
     }
