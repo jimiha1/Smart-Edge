@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import com.imi.smartedge.sidebar.panel.databinding.ActivitySettingsMiscBinding
@@ -79,6 +80,14 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
                 binding.featureHideRecents.setOnCheckedChangeListener(null)
                 binding.featureHideRecents.isChecked = previous
                 binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
+                // The first PackageManager call may have landed before the
+                // throw, leaving alias state flipped against the rolled-back
+                // preference. Reconcile immediately instead of waiting for
+                // the next process start; sync() can itself fail, so guard it.
+                runCatching { RecentsHideHelper.sync(this) }
+                    .onFailure {
+                        Log.w("MiscellaneousSettingsActivity", "Post-rollback alias sync failed", it)
+                    }
                 binding.root.showModernToast("Couldn't change Recents visibility: ${e.message}")
             }
         }
