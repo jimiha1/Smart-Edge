@@ -206,19 +206,26 @@ class PanelAccessibilityService : AccessibilityService() {
             lastPackageName = packageName
 
             val className = event.className?.toString() ?: ""
-            
-            // Store current foreground package for Context/Game mode
-            panelPrefs.currentForegroundPackage = packageName
-            
+
             // Get the current active keyboard package
             val defaultIme = android.provider.Settings.Secure.getString(
                 contentResolver,
                 android.provider.Settings.Secure.DEFAULT_INPUT_METHOD
             )
             val imePackage = defaultIme?.substringBefore("/") ?: ""
-            
+
             val isSystemPkg = packageName == "android" || packageName == "com.android.systemui"
-            
+
+            // Only track real app windows as "foreground". System overlays (status bar,
+            // dialogs, toasts) and the IME post window events too; storing them would
+            // pollute currentForegroundPackage and make the onlyOnHome launcher check
+            // treat a stale system package as "home", re-showing the handle inside apps.
+            if (!isSystemPkg && packageName != imePackage &&
+                !className.contains("InputMethod", ignoreCase = true)
+            ) {
+                panelPrefs.currentForegroundPackage = packageName
+            }
+
             if (packageName != "com.imi.smartedge.sidebar.panel" && packageName != imePackage && !isSystemPkg) {
                 if (panelPrefs.serviceEnabled) {
                     val closeIntent = Intent(this, FloatingPanelService::class.java).apply {

@@ -145,6 +145,8 @@
 
     <string name="misc_section_general">General</string>
     <string name="misc_app_language">App Language</string>
+    <string name="misc_hide_notification_label">Hide Status Bar Notification</string>
+    <string name="misc_hide_notification_desc">Run the panel service without a persistent notification; keep-alive then relies on the Accessibility service</string>
     <string name="misc_section_backup">Backup &amp; Restore</string>
     <string name="misc_export_title">Export Settings</string>
     <string name="misc_export_desc">Save setup to internal storage</string>

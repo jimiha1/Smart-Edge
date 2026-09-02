@@ -146,6 +146,8 @@
 
     <string name="misc_section_general">通用</string>
     <string name="misc_app_language">应用语言</string>
+    <string name="misc_hide_notification_label">隐藏状态栏通知</string>
+    <string name="misc_hide_notification_desc">面板服务不以常驻通知运行,保活依赖无障碍服务(系统深度清理后需重新打开应用)</string>
     <string name="misc_section_backup">备份与恢复</string>
     <string name="misc_export_title">导出设置</string>
     <string name="misc_export_desc">将配置保存到内部存储</string>

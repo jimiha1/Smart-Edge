@@ -55,6 +55,15 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
         updateLanguageLabel()
         binding.featureLanguage.setOnClickListener { showLanguagePicker() }
 
+        binding.featureHideNotification.isChecked = panelPrefs.hideServiceNotification
+        binding.featureHideNotification.setOnCheckedChangeListener { _, isChecked ->
+            panelPrefs.hideServiceNotification = isChecked
+            // ACTION_REFRESH applies/strips the foreground notification immediately
+            startService(Intent(this, FloatingPanelService::class.java).apply {
+                action = FloatingPanelService.ACTION_REFRESH
+            })
+        }
+
         binding.btnExportSettings.setOnClickListener {
             exportSettingsToDownloads()
         }
