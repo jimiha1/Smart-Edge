@@ -504,8 +504,11 @@ class FloatingPanelService : Service() {
         val resolveInfo = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
         val homePkg = resolveInfo?.activityInfo?.packageName
         
-        // Also check all installed launchers as some devices have multiple or third-party ones
+        // Also check all installed launchers as some devices have multiple or third-party ones.
+        // FallbackHome (a provisioning stub inside the Settings package) must be excluded,
+        // otherwise opening the Settings app is misdetected as "on the home screen".
         val allLaunchers = packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            .filter { it.activityInfo.name != "com.android.settings.FallbackHome" }
             .map { it.activityInfo.packageName }
         
         return currentPkg == homePkg || allLaunchers.contains(currentPkg) || currentPkg == "com.android.systemui"
