@@ -18,7 +18,7 @@ android {
         versionName = "1.3.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        resConfigs("en", "es")
+        resConfigs("en", "es", "zh")
     }
 
     val keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -44,7 +44,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("release")
+            // keystore.properties is CI-only; without it, build an unsigned release instead of failing configuration
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
