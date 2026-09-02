@@ -1,0 +1,165 @@
+# Review package: 991ef99..4399cbe
+
+## Commits
+4399cbe feat(recents): runtime alias switching engine (RecentsHideHelper)
+
+## Files changed
+ .../smartedge/sidebar/panel/PanelPreferences.kt    | 10 ++++
+ .../smartedge/sidebar/panel/RecentsHideHelper.kt   | 62 ++++++++++++++++++++++
+ .../imi/smartedge/sidebar/panel/SidePanelApp.kt    |  4 ++
+ 3 files changed, 76 insertions(+)
+
+## Diff
+diff --git a/app/src/main/java/com/imi/smartedge/sidebar/panel/PanelPreferences.kt b/app/src/main/java/com/imi/smartedge/sidebar/panel/PanelPreferences.kt
+index cb3cd09..73db602 100644
+--- a/app/src/main/java/com/imi/smartedge/sidebar/panel/PanelPreferences.kt
++++ b/app/src/main/java/com/imi/smartedge/sidebar/panel/PanelPreferences.kt
+@@ -27,20 +27,21 @@ class PanelPreferences(context: Context) {
+         private const val KEY_HANDLE_OFFSET = "handle_offset"
+         private const val KEY_ACCENT_COLOR = "accent_color"
+         private const val KEY_USE_CUSTOM_ACCENT = "use_custom_accent"
+         private const val KEY_PANEL_COLUMNS = "panel_columns"
+         private const val KEY_UI_THEME = "ui_theme"
+ 
+         private const val KEY_PANEL_RADIUS = "panel_radius"
+         private const val KEY_PANEL_BG_COLOR = "panel_bg_color"
+         private const val KEY_HIDE_BG = "hide_bg"
+         private const val KEY_HIDE_NOTIFICATION = "hide_service_notification"
++        private const val KEY_HIDE_FROM_RECENTS = "hide_from_recents"
+         private const val KEY_SHOW_TOOLS = "show_tools"
+         private const val KEY_ICON_SHAPE = "icon_shape"
+         private const val KEY_GESTURES_ENABLED = "gestures_enabled"
+         private const val KEY_SHOW_IN_LANDSCAPE = "show_in_landscape"
+         private const val KEY_THEME_MODE = "theme_mode"
+ 
+         private const val KEY_PILL_WIDTH = "pill_width"
+         private const val KEY_PILL_COLOR = "pill_color"
+         private const val KEY_TAP_TO_OPEN = "tap_to_open"
+         private const val KEY_DOUBLE_TAP_TO_OPEN = "double_tap_to_open"
+@@ -628,20 +629,29 @@ class PanelPreferences(context: Context) {
+ 
+     /**
+      * Run the panel service without the persistent foreground notification.
+      * Keep-alive then relies on the accessibility service binding holding the
+      * process at foreground priority.
+      */
+     var hideServiceNotification: Boolean
+         get() = prefs.getBoolean(KEY_HIDE_NOTIFICATION, false)
+         set(value) = prefs.edit { putBoolean(KEY_HIDE_NOTIFICATION, value) }
+ 
++    /**
++     * Exclude the app's task from Recents (default on). Implemented by toggling
++     * the launcher activity-aliases — see RecentsHideHelper. Not part of backup
++     * export: it is device-level UI state, like hideServiceNotification.
++     */
++    var hideFromRecents: Boolean
++        get() = prefs.getBoolean(KEY_HIDE_FROM_RECENTS, true)
++        set(value) = prefs.edit { putBoolean(KEY_HIDE_FROM_RECENTS, value) }
++
+     var pillWidth: Int
+         get() = prefs.getInt(KEY_PILL_WIDTH, DEFAULT_PILL_WIDTH)
+         set(value) = prefs.edit { putInt(KEY_PILL_WIDTH, value) }
+ 
+     var showTools: Boolean
+         get() = prefs.getBoolean(KEY_SHOW_TOOLS, DEFAULT_SHOW_TOOLS)
+         set(value) = prefs.edit { putBoolean(KEY_SHOW_TOOLS, value) }
+ 
+     var showLogs: Boolean
+         get() = prefs.getBoolean(KEY_SHOW_LOGS, DEFAULT_SHOW_LOGS)
+diff --git a/app/src/main/java/com/imi/smartedge/sidebar/panel/RecentsHideHelper.kt b/app/src/main/java/com/imi/smartedge/sidebar/panel/RecentsHideHelper.kt
+new file mode 100644
+index 0000000..be3b03d
+--- /dev/null
++++ b/app/src/main/java/com/imi/smartedge/sidebar/panel/RecentsHideHelper.kt
+@@ -0,0 +1,62 @@
++package com.imi.smartedge.sidebar.panel
++
++import android.content.ComponentName
++import android.content.Context
++import android.content.pm.PackageManager
++
++/**
++ * Switches the manifest launcher entry between the LauncherHidden and
++ * LauncherVisible activity-aliases so the app's task can be excluded from
++ * Recents at runtime. This prevents the panel service from being
++ * swipe-killed on OEM ROMs that terminate the process when a task card
++ * is dismissed. Only one alias is enabled at a time; both share the
++ * application icon/label, so the home-screen icon looks unchanged.
++ */
++object RecentsHideHelper {
++
++    private fun hiddenAlias(context: Context) =
++        ComponentName(context, "${context.packageName}.LauncherHidden")
++
++    private fun visibleAlias(context: Context) =
++        ComponentName(context, "${context.packageName}.LauncherVisible")
++
++    /**
++     * Enables exactly one of the two launcher aliases. Pass hidden = true to
++     * exclude the app's task from Recents. Uses DONT_KILL_APP so the running
++     * foreground service is not restarted by the switch.
++     */
++    fun apply(context: Context, hidden: Boolean) {
++        val pm = context.packageManager
++        pm.setComponentEnabledSetting(
++            hiddenAlias(context),
++            if (hidden) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
++            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
++            PackageManager.DONT_KILL_APP
++        )
++        pm.setComponentEnabledSetting(
++            visibleAlias(context),
++            if (hidden) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
++            else PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
++            PackageManager.DONT_KILL_APP
++        )
++    }
++
++    /**
++     * Reconciles alias component state with the hideFromRecents preference.
++     * Covers drift such as component state surviving an app-data clear, or a
++     * partially-applied switch. Safe to call on every app start; it is a no-op
++     * when the states already agree (DEFAULT state counts as the manifest
++     * default, which matches the preference default).
++     */
++    fun sync(context: Context) {
++        val hidden = PanelPreferences(context).hideFromRecents
++        val pm = context.packageManager
++        val wantHidden = if (hidden) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
++        else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
++        val wantVisible = if (hidden) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
++        else PackageManager.COMPONENT_ENABLED_STATE_ENABLED
++        val hiddenOk = pm.getComponentEnabledSetting(hiddenAlias(context)) == wantHidden
++        val visibleOk = pm.getComponentEnabledSetting(visibleAlias(context)) == wantVisible
++        if (!hiddenOk || !visibleOk) apply(context, hidden)
++    }
++}
+diff --git a/app/src/main/java/com/imi/smartedge/sidebar/panel/SidePanelApp.kt b/app/src/main/java/com/imi/smartedge/sidebar/panel/SidePanelApp.kt
+index 1ee92d5..0c9877b 100644
+--- a/app/src/main/java/com/imi/smartedge/sidebar/panel/SidePanelApp.kt
++++ b/app/src/main/java/com/imi/smartedge/sidebar/panel/SidePanelApp.kt
+@@ -9,20 +9,24 @@ class SidePanelApp : Application() {
+     override fun attachBaseContext(base: android.content.Context) {
+         super.attachBaseContext(LocaleHelper.onAttach(base))
+     }
+ 
+     override fun onCreate() {
+         super.onCreate()
+         
+         // Apply the saved theme mode
+         applyAppTheme(this)
+ 
++        // Keep launcher alias components in sync with the hideFromRecents preference
++        // (corrects drift, e.g. component state surviving an app-data clear)
++        RecentsHideHelper.sync(this)
++
+         // Initialize HiddenApiBypass to allow calling ActivityOptions.setLaunchWindowingMode
+         // and other hidden APIs needed for freeform window launching.
+         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+             var bypassSuccess = false
+             
+             // PRIMARY: Use the LSPosed HiddenApiBypass library
+             // The correct method name is "addHiddenApiExemptions" (NOT "addExemptions")
+             try {
+                 val bypassClass = Class.forName("org.lsposed.hiddenapibypass.HiddenApiBypass")
+                 // Exempt ALL hidden APIs using the "L" prefix (all classes in the android namespace)
