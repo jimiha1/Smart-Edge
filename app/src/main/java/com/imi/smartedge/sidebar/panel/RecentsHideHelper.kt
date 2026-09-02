@@ -2,6 +2,7 @@ package com.imi.smartedge.sidebar.panel
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 
 /**
@@ -58,5 +59,68 @@ object RecentsHideHelper {
         val hiddenOk = pm.getComponentEnabledSetting(hiddenAlias(context)) == wantHidden
         val visibleOk = pm.getComponentEnabledSetting(visibleAlias(context)) == wantVisible
         if (!hiddenOk || !visibleOk) apply(context, hidden)
+    }
+
+    /**
+     * Some Android versions (verified on API 35) ignore
+     * android:excludeFromRecents declared on an activity-alias, so exclusion
+     * is additionally enforced with the runtime intent flag: whenever the
+     * task's base intent does not match the hideFromRecents preference, the
+     * activity re-launches itself into a fresh task whose base intent carries
+     * FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS (or drops it when showing again).
+     * Returns true when the caller was re-launched and must return from
+     * onCreate immediately.
+     *
+     * API 35 implementation notes (all verified on emulator):
+     * - A CLEAR_TASK relaunch reuses the existing task without restamping
+     *   its base intent, so the flag never takes effect; MULTIPLE_TASK is
+     *   required to force a fresh task that adopts the flag.
+     * - A plain finish() leaves a recents tombstone for the original
+     *   launcher task that still renders a card, so the old task is removed
+     *   via AppTask.finishAndRemoveTask().
+     * - After the preference is toggled inside a live task the launcher
+     *   stacks the new root on the stale task, so the mismatch check reads
+     *   the task's base intent (not just this activity's intent) and stale
+     *   sibling tasks are removed to leave exactly one correctly-flagged
+     *   task.
+     * - The fresh task is rooted at the enabled launcher alias so that
+     *   toggling the preference kills the stale task (the platform removes
+     *   tasks whose root component was disabled), making the next launch
+     *   rebuild the flag state from scratch.
+     */
+    fun ensureExcluded(activity: android.app.Activity): Boolean {
+        val hidden = PanelPreferences(activity).hideFromRecents
+        val am = activity.getSystemService(android.app.ActivityManager::class.java) ?: return false
+        val currentTaskId = activity.taskId
+        val taskExcluded = am.appTasks
+            .firstOrNull { it.taskInfo?.id == currentTaskId }
+            ?.taskInfo?.baseIntent
+            ?.flags?.and(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0
+        val intentExcluded =
+            activity.intent?.flags?.and(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0
+        if (hidden == (taskExcluded || intentExcluded)) return false
+        // Drop sibling tasks that still carry the stale flag state.
+        am.appTasks.filter { it.taskInfo?.id != currentTaskId }.forEach { it.finishAndRemoveTask() }
+        // Root the fresh task at the launcher alias matching the preference:
+        // disabling an alias kills tasks rooted at it, so toggling the
+        // preference tears down the stale task and the next launch rebuilds
+        // one with the right flag state. Falls back to the activity's real
+        // class if the alias is not resolvable.
+        val aliasComponent = if (hidden) hiddenAlias(activity) else visibleAlias(activity)
+        val target = runCatching {
+            activity.packageManager.getActivityInfo(aliasComponent, 0)
+        }.getOrNull()?.let { aliasComponent } ?: ComponentName(activity, activity.javaClass)
+        val relaunch = Intent(activity.intent).apply {
+            setComponent(target)
+            setFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                (if (hidden) Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS else 0)
+            )
+        }
+        activity.startActivity(relaunch)
+        am.appTasks.firstOrNull { it.taskInfo?.id == currentTaskId }?.finishAndRemoveTask()
+        activity.finish()
+        return true
     }
 }

@@ -27,6 +27,7 @@ class SetupActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (RecentsHideHelper.ensureExcluded(this)) return
         binding = ActivitySetupBinding.inflate(layoutInflater)
         setContentView(binding.root)
         panelPrefs = PanelPreferences(this)
