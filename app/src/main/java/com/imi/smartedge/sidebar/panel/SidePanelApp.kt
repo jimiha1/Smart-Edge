@@ -16,6 +16,10 @@ class SidePanelApp : Application() {
         // Apply the saved theme mode
         applyAppTheme(this)
 
+        // Keep launcher alias components in sync with the hideFromRecents preference
+        // (corrects drift, e.g. component state surviving an app-data clear)
+        RecentsHideHelper.sync(this)
+
         // Initialize HiddenApiBypass to allow calling ActivityOptions.setLaunchWindowingMode
         // and other hidden APIs needed for freeform window launching.
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {

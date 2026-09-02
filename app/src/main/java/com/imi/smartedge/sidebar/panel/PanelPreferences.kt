@@ -34,6 +34,7 @@ class PanelPreferences(context: Context) {
         private const val KEY_PANEL_BG_COLOR = "panel_bg_color"
         private const val KEY_HIDE_BG = "hide_bg"
         private const val KEY_HIDE_NOTIFICATION = "hide_service_notification"
+        private const val KEY_HIDE_FROM_RECENTS = "hide_from_recents"
         private const val KEY_SHOW_TOOLS = "show_tools"
         private const val KEY_ICON_SHAPE = "icon_shape"
         private const val KEY_GESTURES_ENABLED = "gestures_enabled"
@@ -634,6 +635,15 @@ class PanelPreferences(context: Context) {
     var hideServiceNotification: Boolean
         get() = prefs.getBoolean(KEY_HIDE_NOTIFICATION, false)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_NOTIFICATION, value) }
+
+    /**
+     * Exclude the app's task from Recents (default on). Implemented by toggling
+     * the launcher activity-aliases — see RecentsHideHelper. Not part of backup
+     * export: it is device-level UI state, like hideServiceNotification.
+     */
+    var hideFromRecents: Boolean
+        get() = prefs.getBoolean(KEY_HIDE_FROM_RECENTS, true)
+        set(value) = prefs.edit { putBoolean(KEY_HIDE_FROM_RECENTS, value) }
 
     var pillWidth: Int
         get() = prefs.getInt(KEY_PILL_WIDTH, DEFAULT_PILL_WIDTH)
