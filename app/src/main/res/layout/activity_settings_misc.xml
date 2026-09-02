@@ -73,6 +73,30 @@
                             android:textSize="14sp" />
                     </LinearLayout>
 
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="?attr/colorOutlineVariant"
+                        android:layout_marginVertical="4dp" />
+
+                    <!-- Hide persistent notification -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/feature_hide_notification"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/misc_hide_notification_label"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="16sp"
+                        android:paddingVertical="12dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/misc_hide_notification_desc"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp" />
+
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

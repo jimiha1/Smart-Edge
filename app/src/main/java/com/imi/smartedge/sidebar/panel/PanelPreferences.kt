@@ -33,6 +33,7 @@ class PanelPreferences(context: Context) {
         private const val KEY_PANEL_RADIUS = "panel_radius"
         private const val KEY_PANEL_BG_COLOR = "panel_bg_color"
         private const val KEY_HIDE_BG = "hide_bg"
+        private const val KEY_HIDE_NOTIFICATION = "hide_service_notification"
         private const val KEY_SHOW_TOOLS = "show_tools"
         private const val KEY_ICON_SHAPE = "icon_shape"
         private const val KEY_GESTURES_ENABLED = "gestures_enabled"
@@ -624,6 +625,15 @@ class PanelPreferences(context: Context) {
     var hideBackground: Boolean
         get() = prefs.getBoolean(KEY_HIDE_BG, DEFAULT_HIDE_BG)
         set(value) = prefs.edit { putBoolean(KEY_HIDE_BG, value) }
+
+    /**
+     * Run the panel service without the persistent foreground notification.
+     * Keep-alive then relies on the accessibility service binding holding the
+     * process at foreground priority.
+     */
+    var hideServiceNotification: Boolean
+        get() = prefs.getBoolean(KEY_HIDE_NOTIFICATION, false)
+        set(value) = prefs.edit { putBoolean(KEY_HIDE_NOTIFICATION, value) }
 
     var pillWidth: Int
         get() = prefs.getInt(KEY_PILL_WIDTH, DEFAULT_PILL_WIDTH)

@@ -157,6 +157,7 @@ class FloatingPanelService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, buildNotification())
         }
+        applyNotificationVisibility()
 
         initSidePanel()
         initPickerPanel()
@@ -249,6 +250,7 @@ class FloatingPanelService : Service() {
                 handler.postDelayed({ triggerScreenshot() }, 200)
             }
             ACTION_REFRESH -> {
+                applyNotificationVisibility()
                 serviceScope.launch {
                     if (panelPrefs.getPanelApps().isEmpty()) {
                         val topApps = AppRepository(this@FloatingPanelService).getTop5Apps()
@@ -1125,6 +1127,21 @@ class FloatingPanelService : Service() {
             }
             
             sidePanelView?.setApps(apps, onComplete)
+        }
+    }
+
+    /**
+     * Optionally strips the foreground notification. The service stays started; with
+     * the accessibility service bound, the process keeps foreground priority, which
+     * is what keeps the overlays alive without the persistent status-bar entry.
+     */
+    private fun applyNotificationVisibility() {
+        if (panelPrefs.hideServiceNotification) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(NOTIFICATION_ID, buildNotification(), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
         }
     }
 
