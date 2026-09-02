@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity(), android.content.SharedPreferences.OnSh
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Early return finishes the activity inside onCreate, so onStart/onResume never run; keep above all initialization below.
         if (RecentsHideHelper.ensureExcluded(this)) return
         android.util.Log.d("MainActivity", "Current Locale: ${java.util.Locale.getDefault().language}")
         binding = com.imi.smartedge.sidebar.panel.databinding.ActivityMainM3Binding.inflate(layoutInflater)

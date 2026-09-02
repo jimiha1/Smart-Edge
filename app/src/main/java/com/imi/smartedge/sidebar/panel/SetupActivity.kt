@@ -27,6 +27,7 @@ class SetupActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Early return finishes the activity inside onCreate, so onStart/onResume never run; keep above all initialization below.
         if (RecentsHideHelper.ensureExcluded(this)) return
         binding = ActivitySetupBinding.inflate(layoutInflater)
         setContentView(binding.root)
