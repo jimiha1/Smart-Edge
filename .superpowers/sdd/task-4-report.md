@@ -132,3 +132,51 @@ Environment notes: emulator needed `ANDROID_AVD_HOME=C:\Users\jiangyunfei\.andro
 - The overview can flash the excluded card for ~1-3 s after opening Recents (stale snapshot before the launcher re-binds); the settled state is clean. Cosmetic, platform-side.
 - Toggling the preference kills the live task mid-session (screen falls to Home) — identical to the pre-fix platform behavior for alias switches, but now it also happens for tasks rooted via the relaunch path. Accepted trade-off of the alias-rooting mechanism.
 - `ensureExcluded` deviates from the mandated sketch as documented above; call sites, method name/signature, and placement are exactly as specified.
+
+## Fix run 2 (review findings F1-F7)
+
+Commit: `bfba7d4` fix(recents): harden relaunch path and narrow task cleanup
+
+### Findings
+
+- **F1 (unguarded remote task-mutation calls)** — `RecentsHideHelper.kt:118` (sibling loop) and `:139-141` (trailing old-task removal) wrap each `finishAndRemoveTask()` in `runCatching`; `startActivity(relaunch)` at `:137` is wrapped in `runCatching` and on failure the method returns `false` **without** calling `activity.finish()` — contract "returns true ⟺ caller was re-launched" now holds; on success the trailing removal is runCatching'd, then `finish()`, `return true` (`:142-144`).
+- **F2 (id-only sibling cleanup)** — `RecentsHideHelper.kt:107-118`: sibling filter now requires same `packageName` and base-intent component `className` ending in `.MainActivity` / `.SetupActivity` / `.LauncherHidden` / `.LauncherVisible`; comment updated to say unrelated tasks (e.g. the shortcut trampoline) are left alone.
+- **F3 (null-inverted polarity)** — `RecentsHideHelper.kt:99-104`: both checks use explicit `(... ?: 0).and(FLAG) != 0` so a null short-circuit reads as "not excluded".
+- **F4 (sync KDoc)** — `RecentsHideHelper.kt:50-53`: parenthetical now reads "a fresh install's DEFAULT states are pinned to explicit states on the first sync".
+- **F5 (apply ordering)** — `RecentsHideHelper.kt:24-47`: picks `(incoming, outgoing)` by direction, enables incoming before disabling outgoing; KDoc adds "Throws if the underlying PackageManager call fails — callers handle rollback."
+- **F6 (lifecycle comments)** — `MainActivity.kt:38` and `SetupActivity.kt:30`: one-line comment above each `if (RecentsHideHelper.ensureExcluded(this)) return` noting the early return finishes in onCreate so onStart/onResume never run.
+- **F7 (zh punctuation)** — `values-zh/strings.xml:152`: full-width `。` after 对新启动生效 replaced with half-width `,`.
+
+### Verification
+
+Build: `./gradlew assembleDebug` → `BUILD SUCCESSFUL in 28s` (only pre-existing `taskInfo.id` deprecation warnings; no lint/test regressions). Emulator `dylike_test` (API 35), APK installed, overlay + accessibility granted via adb.
+
+- **R1 fresh state (PASS)** — `pm clear`, cold launch, setup completed via UI (overlay pre-granted; accessibility enabled through `settings put secure` + relaunch, then Continue). Home → Recents: **card ABSENT**. Shots: `.superpowers/sdd/fix2-shot-r1-1.png` (setup), `fix2-shot-r1-2.png` (setup scrolled), `fix2-shot-r1-3.png` (permissions granted), `fix2-shot-r1-4.png` (main screen), `fix2-shot-r1-recents.png` (Recents, no card).
+- **R2 toggle cycle (PASS)** — Misc settings → switch OFF (task torn down by alias disable, fell to Home as designed) → relaunch → Recents **card PRESENT** (`fix2-shot-r2-off-recents.png`); switch ON → relaunch → Recents **card ABSENT** (`fix2-shot-r2-on-recents.png`); switch state persisted OFF and ON across relaunches (re-read `checked=` from UI dumps both times).
+- **R3 shortcut trampoline (PASS)** — app-drawer icon long-press → "Sidebar" shortcut fired with hide ON (no crash, alias still LauncherHidden) and with hide OFF (no crash, alias correctly LauncherVisible). Note: this shortcut toggles the sidebar panel, not the recents pref.
+- **R4 crash scan (PASS)** — `adb logcat -d | grep -E "FATAL|AndroidRuntime" | grep -i smartedge` → empty (0 `FATAL EXCEPTION` lines in the whole buffer).
+
+Environment note: emulator needed `ANDROID_AVD_HOME=C:\Users\jiangyunfei\.android\avd` because `ANDROID_SDK_HOME=C:\Android` otherwise hides the user-profile AVD from the emulator search path.
+
+## Fix run 3 (final review G1-G6)
+
+Date: 2026-09-03. Branch `feat/hide-from-recents`, commit `6d691fd` ("fix(recents): log fallback paths, disclose toggle close behavior", 6 files, +43/-15).
+
+### Per-finding changes
+
+- **G1 (silent exception swallowing)** — `RecentsHideHelper.kt`: added `import android.util.Log` (line 7) and `.onFailure { Log.w("RecentsHideHelper", ...) }` to all four runCatching blocks: sibling-cleanup loop `:126-129` ("Failed to remove stale sibling task"), alias probe `:139-141` ("Failed to resolve launcher alias: $aliasComponent" — was `.getOrNull()` with no logging), startActivity relaunch `:152-154` ("Relaunch into flagged task failed"), trailing finishAndRemoveTask `:157-160` ("Failed to remove original task after relaunch"). Literal-tag style matches `SidePanelApp`/`AppIconModelLoader`.
+- **G2 (copy doesn't disclose kick-to-Home)** — `misc_hide_recents_desc` replaced in all three locales (labels untouched): `values/strings.xml:151`, `values-es/strings.xml:152`, `values-zh/strings.xml:152` (zh half-width punctuation, no trailing period). New copy states changing the setting closes the app and the icon may refresh briefly.
+- **G3 (comment misstates sibling criterion)** — `RecentsHideHelper.kt:107-113`: rewritten to state the actual criterion — selection is by root component (package + launcher className suffix), and once a mismatch is detected every live launcher-rooted sibling is stale (each was launched under the other flag state); unrelated tasks (ToggleActivity's trampoline) are spared.
+- **G4 (nullability inconsistency)** — `RecentsHideHelper.kt:144`: `Intent(activity.intent)` → `Intent(activity.intent ?: Intent())`; setComponent on the copy makes an empty base safe.
+- **G5 (partial-failure window)** — `MiscellaneousSettingsActivity.kt:84-90`: catch block now runs `runCatching { RecentsHideHelper.sync(this) }.onFailure { Log.w("MiscellaneousSettingsActivity", "Post-rollback alias sync failed", it) }` after the pref/switch rollback and before the toast — alias state reconciles immediately instead of at next process start. Guarded because `sync()` calls `apply()` which throws by design plus binder calls.
+- **G6 (spec appendix one commit stale)** — `docs/superpowers/specs/2026-09-02-hide-from-recents-design.md:158-160`: 遗留 line updated — relaunch-path exception guards landed in bfba7d4 with the narrowed sibling cleanup, and fix run 3 adds logging + rollback sync + copy disclosure. New paragraph appended on API-level posture: verification on API 35 only, `ensureExcluded` converges by design on all levels (relaunched intent always carries the constructed flag → at most one extra task create/remove per cold start), API ≤34 emulator smoke is a tracked follow-up before next release.
+
+### Verification
+
+Build: `./gradlew assembleDebug` → `BUILD SUCCESSFUL in 8s` (only pre-existing `taskInfo.id` deprecation warnings at RecentsHideHelper.kt:101/118/157; mirrors.gradle moved aside and restored around the run). Emulator `dylike_test` (API 35) booted with `ANDROID_AVD_HOME=C:\Users\jiangyunfei\.android\avd`, APK installed, overlay via appops, a11y via `settings put secure`.
+
+- **S1 PASS (fresh state)** — pm clear → monkey launch → SetupActivity (overlay + a11y pre-granted) → Continue → MainActivity → Home → Recents: **card ABSENT**. Oracles: overview uiautomator dump has 0 "Smart Edge" texts; `dumpsys activity recents` has 0 smartedge RecentTaskInfo entries (task 51 exists as TaskRecord rooted `.LauncherHidden flg=0x18800000` with no rendered card). Screenshots: `fix3-shot-s1-1-setup.png`, `fix3-shot-s1-2-after-continue.png`, `fix3-shot-s1-3-recents.png`.
+- **S2 PASS (toggle cycle)** — Misc settings shows the new English desc verbatim (`fix3-shot-s2-1-misc-desc.png`). Toggle OFF → task torn down, fell to launcher as designed → relaunch → Recents **card PRESENT** (overview shows "Smart Edge"; dumpsys realActivity entry, `fix3-shot-s2-2-off-recents.png`); switch persisted OFF across relaunch. Toggle ON → fell to launcher → relaunch → Recents **card ABSENT** (0 texts, 0 RecentTaskInfo entries, `fix3-shot-s2-3-on-recents.png`); switch persisted ON across relaunch.
+- **S3 PASS (logcat)** — `logcat -d | grep -E "FATAL|AndroidRuntime" | grep -i smartedge` → empty (0 FATAL EXCEPTION lines in the whole buffer); `grep RecentsHideHelper` → empty — no unexpected warnings during normal operation; guards only log on failure. No W/E lines tagged RecentsHideHelper/MiscellaneousSettingsActivity. Full buffer: `.superpowers/sdd/fix3-logcat.txt`.
+
+Environment note: uiautomator dumps from Git Bash needed `adb shell "uiautomator dump ... && cat ..."` (single-quoted shell command) to avoid MSYS path mangling of /sdcard; Recents screenshots taken 7 s after APP_SWITCH to let the settled state re-bind (fix run 1 note). Emulator shut down via `adb emu kill` after the run.

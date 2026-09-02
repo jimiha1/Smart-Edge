@@ -27,3 +27,9 @@ Environment notes for the other machine:
 - Emulator: ANDROID_HOME=C:\Android, AVD dylike_test, adb at C:\Android\adb.exe; boot `emulator.exe -avd dylike_test -no-snapshot-save`, MCP android tools unusable (no ANDROID_HOME in their env) — drive via adb.
 - git dubious-ownership was fixed via global safe.directory on THIS machine; the other machine may need `git config --global --add safe.directory <path>` again.
 - Screenshots (*.png) were intentionally NOT committed (15MB); evidence text (dumpsys excerpts, PASS/FAIL) is in the reports.
+Fix run 2: complete (commit bfba7d4, review clean; F1-F7 all approved)
+  New minors (final-review triage): silent exception swallowing in runCatching (add Log.w), comment overstates flag-state selection
+Fix run 3: complete (commit 6d691fd, re-review approved G1-G6; final review conditions satisfied)
+Final whole-branch review: 'merge with fixes' -> conditions met by fix run 3
+RIDE-list (documented, not blocking): hardcoded en toast (file-wide style), pref-write rollback asymmetry, nullable listener var, Recents 1-3s flash (platform), mid-toggle task kill (platform, now disclosed in copy)
+Follow-up before next release: API<=34 emulator smoke test; lint baseline cleanup (55 pre-existing errors)
