@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity(), android.content.SharedPreferences.OnSh
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (RecentsHideHelper.ensureExcluded(this)) return
         android.util.Log.d("MainActivity", "Current Locale: ${java.util.Locale.getDefault().language}")
         binding = com.imi.smartedge.sidebar.panel.databinding.ActivityMainM3Binding.inflate(layoutInflater)
 
