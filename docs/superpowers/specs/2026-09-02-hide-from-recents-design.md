@@ -155,4 +155,6 @@ object RecentsHideHelper {
 
 实际机制（commit d0e4a10）：`RecentsHideHelper.ensureExcluded(activity)` 在 `MainActivity`/`SetupActivity` 的 `onCreate` 首行调用——任务根自检 flag 与偏好是否一致，不一致时通过 MULTIPLE_TASK + 别名定向自重启生成携带正确 flag 的新任务根，并用 `ActivityManager.getAppTasks()` 清理陈旧任务（toggle 双向调和：开→加 flag，关→去 flag）。V1–V5 验收全部通过。
 
-遗留（下次会话处理）：relaunch 路径的 `finishAndRemoveTask`/`startActivity` 需包异常防护（Important）；若干 Minor 见 `.superpowers/sdd/progress.md`。
+遗留更新：relaunch 路径的 `finishAndRemoveTask`/`startActivity` 异常防护已随 commit bfba7d4 落地（与收窄后的 sibling 清理同批合入）；fix run 3（终审 G1–G6）再补齐：回退路径日志（G1）、切换失败后的即时 `sync()` 对账（G5）、以及「切换即关闭应用」的文案披露（G2）。其余 Minor 见 `.superpowers/sdd/progress.md`。
+
+API 级别姿态：行为验证仅在 API 35 模拟器上进行；`ensureExcluded` 在所有 API 级别上运行并按设计收敛——重启用的 intent 始终携带构造好的 flag，因此在系统对 flag 改写行为不同的级别上，每次冷启动至多多一次任务创建/移除。API ≤34 模拟器冒烟测试已列为下次发布前的跟进项。

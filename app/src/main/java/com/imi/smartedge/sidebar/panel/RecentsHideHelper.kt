@@ -4,6 +4,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
 
 /**
  * Switches the manifest launcher entry between the LauncherHidden and
@@ -103,11 +104,14 @@ object RecentsHideHelper {
         val intentExcluded =
             (activity.intent?.flags ?: 0).and(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) != 0
         if (hidden == (taskExcluded || intentExcluded)) return false
-        // Drop sibling tasks rooted at this app's own launcher entries that
-        // still carry the stale flag state; other tasks (e.g. the shortcut
-        // trampoline) are left alone. Stale AppTask handles can throw once
-        // their task is gone (e.g. during alias-disable teardown), so each
-        // remote call is guarded.
+        // Selection criterion is the task's root component, not per-sibling
+        // flags: once a mismatch is detected against the preference, every
+        // live sibling task rooted at this app's launcher entries
+        // (package + launcher className suffix) is stale, because each was
+        // launched under the other flag state. Unrelated tasks (e.g.
+        // ToggleActivity's shortcut trampoline) are spared. Stale AppTask
+        // handles can throw once their task is gone (e.g. during
+        // alias-disable teardown), so each remote call is guarded.
         val launcherEntrySuffixes =
             listOf(".MainActivity", ".SetupActivity", ".LauncherHidden", ".LauncherVisible")
         am.appTasks
@@ -118,7 +122,12 @@ object RecentsHideHelper {
                     component.packageName == activity.packageName &&
                     launcherEntrySuffixes.any { suffix -> component.className.endsWith(suffix) }
             }
-            .forEach { runCatching { it.finishAndRemoveTask() } }
+            .forEach {
+                runCatching { it.finishAndRemoveTask() }
+                    .onFailure {
+                        Log.w("RecentsHideHelper", "Failed to remove stale sibling task", it)
+                    }
+            }
         // Root the fresh task at the launcher alias matching the preference:
         // disabling an alias kills tasks rooted at it, so toggling the
         // preference tears down the stale task and the next launch rebuilds
@@ -127,19 +136,27 @@ object RecentsHideHelper {
         val aliasComponent = if (hidden) hiddenAlias(activity) else visibleAlias(activity)
         val target = runCatching {
             activity.packageManager.getActivityInfo(aliasComponent, 0)
-        }.getOrNull()?.let { aliasComponent } ?: ComponentName(activity, activity.javaClass)
-        val relaunch = Intent(activity.intent).apply {
+        }
+            .onFailure {
+                Log.w("RecentsHideHelper", "Failed to resolve launcher alias: $aliasComponent", it)
+            }
+            .getOrNull()?.let { aliasComponent } ?: ComponentName(activity, activity.javaClass)
+        val relaunch = Intent(activity.intent ?: Intent()).apply {
             setComponent(target)
             setFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
-                (if (hidden) Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS else 0)
+                    Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                    (if (hidden) Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS else 0)
             )
         }
-        val relaunched = runCatching { activity.startActivity(relaunch) }.isSuccess
+        val relaunched = runCatching { activity.startActivity(relaunch) }
+            .onFailure { Log.w("RecentsHideHelper", "Relaunch into flagged task failed", it) }
+            .isSuccess
         if (!relaunched) return false
         runCatching {
             am.appTasks.firstOrNull { it.taskInfo?.id == currentTaskId }?.finishAndRemoveTask()
+        }.onFailure {
+            Log.w("RecentsHideHelper", "Failed to remove original task after relaunch", it)
         }
         activity.finish()
         return true
