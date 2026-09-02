@@ -44,7 +44,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Welcome to Smart Edge"
+                    android:text="@string/setup_welcome"
                     android:textColor="?attr/colorOnSurface"
                     android:textSize="32sp"
                     android:textStyle="bold"
@@ -54,7 +54,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Fluid and open-source control center"
+                    android:text="@string/setup_subtitle"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="15sp"
                     android:layout_marginTop="8dp" />
@@ -63,7 +63,7 @@
             <!-- REQUIRED SECTION -->
             <TextView
                 style="@style/App_SectionTitle"
-                android:text="Required"
+                android:text="@string/setup_required"
                 android:layout_marginStart="8dp" />
 
             <com.google.android.material.card.MaterialCardView
@@ -108,7 +108,7 @@
                             android:id="@+id/titleOverlay"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Overlay permission"
+                            android:text="@string/setup_overlay_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -117,7 +117,7 @@
                             android:id="@+id/descOverlay"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Draw over other applications"
+                            android:text="@string/setup_overlay_desc"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp" />
                     </LinearLayout>
@@ -173,7 +173,7 @@
                             android:id="@+id/titleAccessibility"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Accessibility service"
+                            android:text="@string/setup_accessibility_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -182,7 +182,7 @@
                             android:id="@+id/descAccessibility"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Required for fluid gestures"
+                            android:text="@string/setup_accessibility_desc"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp" />
                     </LinearLayout>
@@ -199,7 +199,7 @@
             <!-- OPTIONAL SECTION -->
             <TextView
                 style="@style/App_SectionTitle"
-                android:text="Advanced &amp; Background"
+                android:text="@string/setup_advanced_background"
                 android:layout_marginStart="8dp" />
 
             <com.google.android.material.card.MaterialCardView
@@ -244,7 +244,7 @@
                             android:id="@+id/titleAutomation"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Native Gesture"
+                            android:text="@string/setup_automation_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -253,7 +253,7 @@
                             android:id="@+id/descAutomation"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Root/Shizuku: High performance"
+                            android:text="@string/setup_automation_desc"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp" />
                     </LinearLayout>
@@ -309,7 +309,7 @@
                             android:id="@+id/titleBattery"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Battery optimization"
+                            android:text="@string/setup_battery_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -318,7 +318,7 @@
                             android:id="@+id/descBattery"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Improve background reliability"
+                            android:text="@string/setup_battery_desc"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp" />
                     </LinearLayout>
@@ -374,7 +374,7 @@
                             android:id="@+id/titleAutoStart"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Auto start"
+                            android:text="@string/setup_autostart_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -383,7 +383,7 @@
                             android:id="@+id/descAutoStart"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Required for launch after reboot"
+                            android:text="@string/setup_autostart_desc"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp" />
                     </LinearLayout>
@@ -439,7 +439,7 @@
                             android:id="@+id/titleNotifications"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Notification access"
+                            android:text="@string/setup_notifications_title"
                             android:textColor="?attr/colorOnSurface"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -448,7 +448,7 @@
                             android:id="@+id/descNotifications"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Required for Productivity Hub"
+                            android:text="@string/setup_notifications_desc"
                             android:textColor="?attr/colorOnSurfaceVariant"
                             android:textSize="13sp" />
                     </LinearLayout>
@@ -481,7 +481,7 @@
                     style="@style/App_Button_Tonal"
                     android:layout_width="wrap_content"
                     android:layout_height="54dp"
-                    android:text="Grant all"
+                    android:text="@string/setup_grant_all"
                     android:textColor="?attr/colorPrimary"
                     android:paddingHorizontal="24dp" />
 
@@ -494,7 +494,7 @@
                     android:id="@+id/btnContinue"
                     style="@style/App_Button_Continue"
                     android:layout_width="wrap_content"
-                    android:text="Continue"
+                    android:text="@string/setup_continue"
                     android:enabled="false" />
             </LinearLayout>
 

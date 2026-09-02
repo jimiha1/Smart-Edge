@@ -133,7 +133,7 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
         val tvTitle = TextView(ctx).apply {
-            text = "Native Gesture Engine"
+            text = ctx.getString(R.string.secure_title)
             textSize = 20f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
@@ -141,7 +141,7 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
         
         val isGranted = ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
         tvStatus = TextView(ctx).apply {
-            text = if (isGranted) "Permission: Granted" else "Permission: Missing"
+            text = if (isGranted) ctx.getString(R.string.secure_status_granted) else ctx.getString(R.string.secure_status_missing)
             textSize = 12f
             setTextColor(if (isGranted) Color.parseColor("#00FF00") else Color.parseColor("#99FFFFFF"))
             if (isGranted) typeface = Typeface.DEFAULT_BOLD
@@ -152,9 +152,9 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
         // Add Automation Status
         tvAutoStatus = TextView(ctx).apply {
             val autoStatus = when {
-                AutomationManager.isRootAvailable() -> "Engine: Root Active"
-                AutomationManager.isShizukuAvailable() -> "Engine: Shizuku Active"
-                else -> "Engine: Service Not Running"
+                AutomationManager.isRootAvailable() -> ctx.getString(R.string.secure_engine_root)
+                AutomationManager.isShizukuAvailable() -> ctx.getString(R.string.secure_engine_shizuku)
+                else -> ctx.getString(R.string.secure_engine_off)
             }
             text = autoStatus
             textSize = 11f
@@ -168,7 +168,7 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
         root.addView(headerRow)
 
         val tvDesc = TextView(ctx).apply {
-            text = "Enable high-performance gestures without traditional Accessibility Services."
+            text = ctx.getString(R.string.secure_desc)
             textSize = 14f
             setTextColor(Color.parseColor("#B3FFFFFF"))
             layoutParams = LinearLayout.LayoutParams(
@@ -249,7 +249,7 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
         }
 
         val adbTitle = TextView(ctx).apply {
-            text = "MANUAL SETUP (ADB)"
+            text = ctx.getString(R.string.secure_manual)
             textSize = 11f
             setTextColor(Color.parseColor("#66FFFFFF"))
             typeface = Typeface.DEFAULT_BOLD
@@ -259,7 +259,7 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
         adbHeaderRow.addView(adbTitle)
 
         val btnCopy = TextView(ctx).apply {
-            text = "Copy"
+            text = ctx.getString(R.string.secure_copy_short)
             setTextColor(Color.parseColor("#4A9EFF"))
             textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
@@ -303,7 +303,7 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
 
         // Close Button
         val btnClose = Button(ctx).apply {
-            text = "Done"
+            text = ctx.getString(R.string.secure_done)
             setTextColor(Color.WHITE)
             textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
@@ -398,15 +398,15 @@ class SecureSettingsDialog : BottomSheetDialogFragment() {
         
         val ctx = requireContext()
         val isGranted = ctx.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED
-        tvStatus.text = if (isGranted) "Permission: Granted" else "Permission: Missing"
+        tvStatus.text = if (isGranted) ctx.getString(R.string.secure_status_granted) else ctx.getString(R.string.secure_status_missing)
         tvStatus.setTextColor(if (isGranted) Color.parseColor("#00FF00") else Color.parseColor("#99FFFFFF"))
         tvStatus.typeface = if (isGranted) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         
         val isAutomationPossible = AutomationManager.isAutomationPossible()
         tvAutoStatus.text = if (isAutomationPossible) {
             when {
-                AutomationManager.isRootAvailable() -> "Engine: Root Active"
-                AutomationManager.isShizukuAvailable() -> "Engine: Shizuku Active"
+                AutomationManager.isRootAvailable() -> ctx.getString(R.string.secure_engine_root)
+                AutomationManager.isShizukuAvailable() -> ctx.getString(R.string.secure_engine_shizuku)
                 else -> "Engine: Active"
             }
         } else {

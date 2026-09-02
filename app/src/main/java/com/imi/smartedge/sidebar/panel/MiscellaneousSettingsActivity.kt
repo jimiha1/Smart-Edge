@@ -67,17 +67,18 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
     private fun updateLanguageLabel() {
         binding.tvLanguageValue.text = when (panelPrefs.appLanguage) {
             "es" -> "Español"
+            "zh" -> "中文(简体)"
             else -> "English"
         }
     }
 
     private fun showLanguagePicker() {
-        val languages = arrayOf("English", "Español")
-        val codes = arrayOf("en", "es")
+        val languages = arrayOf("English", "Español", "中文(简体)")
+        val codes = arrayOf("en", "es", "zh")
         val currentIndex = codes.indexOf(panelPrefs.appLanguage).let { if (it == -1) 0 else it }
 
         com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-            .setTitle("Choose App Language")
+            .setTitle(getString(R.string.misc_app_language))
             .setSingleChoiceItems(languages, currentIndex) { dialog, which ->
                 val selected = codes[which]
                 if (selected != panelPrefs.appLanguage) {
@@ -91,7 +92,7 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
                 }
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(getString(android.R.string.cancel), null)
             .show()
     }
 

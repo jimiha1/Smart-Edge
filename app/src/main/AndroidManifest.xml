@@ -63,7 +63,7 @@
 
         <activity
             android:name=".ToggleActivity"
-            android:label="Toggle Sidebar"
+            android:label="@string/label_toggle_sidebar"
             android:icon="@mipmap/ic_launcher"
             android:theme="@style/Theme.Transparent"
             android:excludeFromRecents="true"
@@ -80,27 +80,27 @@
 
         <activity
             android:name=".SettingsMainActivity"
-            android:label="Settings"
+            android:label="@string/settings"
             android:theme="@style/Theme.SidePanel.M3" />
 
         <activity
             android:name=".AppearanceSettingsActivity"
-            android:label="Appearance"
+            android:label="@string/section_appearance"
             android:theme="@style/Theme.SidePanel.M3" />
 
         <activity
             android:name=".InteractionSettingsActivity"
-            android:label="Interaction"
+            android:label="@string/section_interaction"
             android:theme="@style/Theme.SidePanel.M3" />
 
         <activity
             android:name=".HandleSettingsActivity"
-            android:label="Handle &amp; Pill"
+            android:label="@string/section_handle"
             android:theme="@style/Theme.SidePanel.M3" />
 
         <activity
             android:name=".ToolsSettingsActivity"
-            android:label="Dashboard Tools"
+            android:label="@string/section_tools"
             android:theme="@style/Theme.SidePanel.M3" />
 
         <activity
@@ -110,17 +110,17 @@
 
         <activity
             android:name=".SupportActivity"
-            android:label="Support"
+            android:label="@string/support_dev_title"
             android:theme="@style/Theme.SidePanel.M3" />
 
         <activity
             android:name=".MiscellaneousSettingsActivity"
-            android:label="Miscellaneous"
+            android:label="@string/section_misc"
             android:theme="@style/Theme.SidePanel.M3" />
 
         <activity
             android:name=".IconPackActivity"
-            android:label="Select Icon Pack"
+            android:label="@string/icon_pack"
             android:theme="@style/Theme.SidePanel" />
 
 
@@ -148,7 +148,7 @@
 
         <service
             android:name=".NotificationTrackingService"
-            android:label="Smart Edge Notification Access"
+            android:label="@string/notif_access_label"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>

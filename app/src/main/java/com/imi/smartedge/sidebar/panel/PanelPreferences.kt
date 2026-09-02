@@ -124,6 +124,7 @@ class PanelPreferences(context: Context) {
         const val THEME_HYPEROS = "hyperos"
         const val THEME_REALME = "realme"
         const val THEME_RICH = "rich"
+        const val THEME_MAGICOS = "magicos"
 
         const val SHAPE_SYSTEM = "system"
         const val SHAPE_CIRCLE = "circle"
@@ -605,8 +606,8 @@ class PanelPreferences(context: Context) {
         set(value) = prefs.edit { putString(KEY_ACCENT_COLOR, value) }
 
     var panelColumns: Int
-        get() = (prefs.getInt(KEY_PANEL_COLUMNS, DEFAULT_PANEL_COLS)).coerceIn(1, 2)
-        set(value) = prefs.edit { putInt(KEY_PANEL_COLUMNS, value.coerceIn(1, 2)) }
+        get() = (prefs.getInt(KEY_PANEL_COLUMNS, DEFAULT_PANEL_COLS)).coerceIn(1, 3)
+        set(value) = prefs.edit { putInt(KEY_PANEL_COLUMNS, value.coerceIn(1, 3)) }
 
     var uiTheme: String
         get() = prefs.getString(KEY_UI_THEME, DEFAULT_THEME) ?: DEFAULT_THEME

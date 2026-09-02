@@ -45,6 +45,7 @@
     <string name="theme_hyperos">HyperOS (Cristal)</string>
     <string name="theme_realme">Realme UI</string>
     <string name="theme_rich">Rich UI (Resplandor)</string>
+    <string name="theme_magicos">MagicOS (Escarchado)</string>
     
     <string name="blur_title">Desenfoque Glassmorphic</string>
     <string name="blur_desc">Puede causar lag en dispositivos básicos (Android 12+)</string>
@@ -226,4 +227,105 @@
     <string name="action_lock_screen">Bloqueo de Pantalla</string>
     <string name="action_power_menu">Menú de Apagado</string>
     <string name="action_move_handle">Mover tirador (Arrastrar)</string>
+
+    <!-- Setup / Onboarding -->
+    <string name="setup_welcome">Bienvenido a Smart Edge</string>
+    <string name="setup_subtitle">Centro de control fluido y de código abierto</string>
+    <string name="setup_required">Requerido</string>
+    <string name="setup_advanced_background">Avanzado y segundo plano</string>
+    <string name="setup_overlay_title">Permiso de superposición</string>
+    <string name="setup_overlay_desc">Dibujar sobre otras aplicaciones</string>
+    <string name="setup_accessibility_title">Servicio de accesibilidad</string>
+    <string name="setup_accessibility_desc">Necesario para gestos fluidos</string>
+    <string name="setup_automation_title">Gesto nativo</string>
+    <string name="setup_automation_desc">Root/Shizuku: alto rendimiento</string>
+    <string name="setup_battery_title">Optimización de batería</string>
+    <string name="setup_battery_desc">Mejora la fiabilidad en segundo plano</string>
+    <string name="setup_autostart_title">Inicio automático</string>
+    <string name="setup_autostart_desc">Necesario para ejecutarse tras reiniciar</string>
+    <string name="setup_notifications_title">Acceso a notificaciones</string>
+    <string name="setup_notifications_desc">Necesario para el Centro de Productividad</string>
+    <string name="setup_grant_all">Conceder todo</string>
+    <string name="setup_all_granted">Todo concedido</string>
+    <string name="setup_continue">Continuar</string>
+
+    <plurals name="panel_columns_count">
+        <item quantity="one">%1$d Columna</item>
+        <item quantity="other">%1$d Columnas</item>
+    </plurals>
+
+    <!-- Tools Settings -->
+    <string name="tools_master_label">Activar herramientas del panel</string>
+    <string name="tools_master_desc">Interruptor principal de la sección de herramientas de la barra lateral (zona inferior)</string>
+    <string name="tools_folder_label">Carpeta de herramientas dedicada</string>
+    <string name="tools_folder_desc">Añade un botón de carpeta a la lista de apps que abre un menú de herramientas separado</string>
+    <string name="tools_section_items">Elementos del panel</string>
+    <string name="tools_sys_info_label">Superposición de información del sistema</string>
+    <string name="tools_sys_info_desc">Muestra RAM y batería en tiempo real en la barra lateral</string>
+    <string name="tools_power_label">Menú de apagado</string>
+    <string name="tools_power_desc">Añade herramientas de apagado/reinicio al panel</string>
+    <string name="tools_volume_label">Controles de volumen</string>
+    <string name="tools_volume_desc">Añade teclas de subir/bajar volumen al panel</string>
+    <string name="tools_brightness_label">Controles de brillo</string>
+    <string name="tools_brightness_desc">Añade teclas de subir/bajar brillo al panel</string>
+    <string name="tools_screenshot_label">Botón de captura</string>
+    <string name="tools_screenshot_desc">Muestra un botón de captura en la parte inferior de la barra lateral</string>
+    <string name="tools_section_service">Integración de servicios</string>
+    <string name="tools_shizuku_label">Servicio Shizuku</string>
+    <string name="tools_shizuku_status">No conectado</string>
+    <string name="tools_shizuku_link">Vincular Shizuku</string>
+
+    <!-- Settings main / Support -->
+    <string name="support_dev_title">Apoyar el desarrollo</string>
+    <string name="reset_to_defaults">Restablecer valores</string>
+    <string name="support_desc">SidePanel es 100% gratuito y de código abierto. ¡Tu apoyo mantiene vivo el proyecto!</string>
+    <string name="support_tap_copy">Toca cualquier elemento para copiarlo.</string>
+    <string name="support_binance_id">ID de Binance</string>
+    <string name="support_category_crypto">BINANCE / CRIPTO</string>
+    <string name="support_category_banking">BANCA MÓVIL (BD)</string>
+
+    <!-- Main status -->
+    <string name="status_accessibility_required">Se requiere accesibilidad</string>
+
+    <!-- In-panel App Picker -->
+    <string name="picker_tab_apps">APPS</string>
+    <string name="picker_tab_activities">ACTIVIDADES</string>
+    <string name="picker_all_apps">Todas las apps</string>
+    <string name="picker_edit">EDITAR</string>
+    <string name="picker_done">HECHO</string>
+    <string name="picker_active_notifications">Notificaciones activas</string>
+
+    <!-- Panel dashboard buttons -->
+    <string name="panel_btn_pwr">APG</string>
+    <string name="panel_btn_vol_up">VOL +</string>
+    <string name="panel_btn_vol_down">VOL -</string>
+    <string name="panel_btn_bri_up">BRI +</string>
+    <string name="panel_btn_bri_down">BRI -</string>
+    <string name="panel_btn_sc">CAP</string>
+    <string name="panel_ram_info">RAM: %1$dMB</string>
+    <string name="panel_ram_default">RAM: --</string>
+    <string name="panel_bat_info">BAT: %1$d°C</string>
+    <string name="panel_bat_default">BAT: --</string>
+
+    <!-- Secure settings / automation dialog -->
+    <string name="secure_title">Motor de gestos nativos</string>
+    <string name="secure_inactive">La automatización del sistema está inactiva</string>
+    <string name="secure_desc">Activa gestos de alto rendimiento sin necesidad de servicios de accesibilidad tradicionales.</string>
+    <string name="secure_one_tap">Métodos de un toque</string>
+    <string name="secure_root">Acceso Root</string>
+    <string name="secure_root_desc">Integración directa a nivel de sistema</string>
+    <string name="secure_shizuku">Shizuku</string>
+    <string name="secure_shizuku_desc">Automatización inalámbrica basada en ADB</string>
+    <string name="secure_status_granted">Permiso: concedido</string>
+    <string name="secure_status_missing">Permiso: ausente</string>
+    <string name="secure_engine_root">Motor: Root activo</string>
+    <string name="secure_engine_shizuku">Motor: Shizuku activo</string>
+    <string name="secure_engine_off">Motor: servicio no activo</string>
+    <string name="secure_grant">Conceder</string>
+    <string name="secure_revoke">Revocar</string>
+    <string name="secure_manual">Configuración manual (ADB)</string>
+    <string name="secure_copy">Copiar comando</string>
+    <string name="secure_copy_short">Copiar</string>
+    <string name="secure_done">Hecho</string>
+    <string name="notif_access_label">Acceso a notificaciones de Smart Edge</string>
 </resources>

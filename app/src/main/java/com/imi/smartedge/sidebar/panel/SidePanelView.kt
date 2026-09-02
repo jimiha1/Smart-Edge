@@ -66,11 +66,11 @@ class SidePanelView @JvmOverloads constructor(
             val availableMegs = mi.availMem / 1048576L
             val totalMegs = mi.totalMem / 1048576L
             val usedMegs = totalMegs - availableMegs
-            binding.tvRamUsage.text = "RAM: ${usedMegs}MB"
+            binding.tvRamUsage.text = context.getString(R.string.panel_ram_info, usedMegs)
 
             val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
             val temp = intent?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
-            binding.tvBatTemp.text = "BAT: ${temp / 10}°C"
+            binding.tvBatTemp.text = context.getString(R.string.panel_bat_info, temp / 10)
         } catch (e: Exception) {}
     }
 
@@ -393,10 +393,10 @@ class SidePanelView @JvmOverloads constructor(
         val lp = binding.panelCard.layoutParams
         
         // Scale only the icon area, keeping the padding/chrome fixed
-        val newWidthDp = if (currentCols == 2) {
-            52f + (88f * scale)
-        } else {
-            32f + (40f * scale)
+        val newWidthDp = when (currentCols) {
+            1 -> 32f + (48f * scale)
+            2 -> 52f + (104f * scale)
+            else -> 88f + (168f * scale)
         }
         
         lp.width = context.dpToPx(newWidthDp.toInt())
@@ -581,12 +581,16 @@ class SidePanelView @JvmOverloads constructor(
                 else -> try { Color.parseColor(panelPrefs.panelBackgroundColor) } catch (e: Exception) { Color.parseColor("#E61A1C1E") }
             }
             
-            val radius = context.dpToPx(if (theme == PanelPreferences.THEME_HYPEROS) 16 else panelPrefs.panelCornerRadius).toFloat()
-            
+            val radius = context.dpToPx(when (theme) {
+                PanelPreferences.THEME_HYPEROS -> 16
+                PanelPreferences.THEME_MAGICOS -> 28
+                else -> panelPrefs.panelCornerRadius
+            }).toFloat()
+
             val shape = GradientDrawable().apply {
                 setColor(bgColor)
                 cornerRadius = radius
-                
+
                 if (theme == PanelPreferences.THEME_HYPEROS) {
                     setStroke(context.dpToPx(1), Color.parseColor("#4DFFFFFF"))
                 } else if (theme == PanelPreferences.THEME_RICH) {
@@ -598,12 +602,22 @@ class SidePanelView @JvmOverloads constructor(
                     colors = intArrayOf(color1, color2)
                     orientation = GradientDrawable.Orientation.TOP_BOTTOM
                     setStroke(context.dpToPx(1), Color.parseColor("#33FFFFFF"))
+                } else if (theme == PanelPreferences.THEME_MAGICOS) {
+                    // Warm light frosted glass with a vertical gradient
+                    colors = intArrayOf(Color.parseColor("#CCFBF6ED"), Color.parseColor("#B3EFE8D9"))
+                    orientation = GradientDrawable.Orientation.TOP_BOTTOM
+                    setStroke(context.dpToPx(1), Color.parseColor("#40FFFFFF"))
                 }
             }
             binding.panelCard.background = shape
-            
-            // Force white/light icons and text for dark floating panel
-            val iconColorList = ColorStateList.valueOf(Color.WHITE)
+
+            // MagicOS uses a light glass card, so content is dark; other themes keep light content on dark glass
+            val contentColor = if (theme == PanelPreferences.THEME_MAGICOS) {
+                Color.parseColor("#D92B2723")
+            } else {
+                Color.WHITE
+            }
+            val iconColorList = ColorStateList.valueOf(contentColor)
             binding.btnClose.imageTintList = iconColorList
             binding.btnScreenshot.imageTintList = iconColorList
             binding.btnVolumeUp.imageTintList = iconColorList
@@ -612,9 +626,15 @@ class SidePanelView @JvmOverloads constructor(
             binding.btnBrightnessDown.imageTintList = iconColorList
             binding.btnReboot.imageTintList = iconColorList
             binding.btnBack.imageTintList = iconColorList
-            
-            binding.tvRamUsage.setTextColor(Color.WHITE)
-            binding.tvBatTemp.setTextColor(Color.WHITE)
+            adapter.setLabelColor(contentColor)
+            if (theme == PanelPreferences.THEME_MAGICOS) {
+                binding.panelCard.elevation = context.dpToPx(10).toFloat()
+            } else {
+                binding.panelCard.elevation = 0f
+            }
+
+            binding.tvRamUsage.setTextColor(contentColor)
+            binding.tvBatTemp.setTextColor(contentColor)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 binding.panelCard.clipToOutline = true

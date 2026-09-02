@@ -57,6 +57,7 @@ class FloatingPanelService : Service() {
     private var isPanelOpen = false
     private var isPickerOpen = false
     private var isImmersiveMode = false
+    private var isImeVisible = false
     private var currentFolderId: String? = null
     private lateinit var panelPrefs: PanelPreferences
     private var lastPickerToggleTime = 0L
@@ -282,15 +283,8 @@ class FloatingPanelService : Service() {
                     sidePanelView?.refreshIcons()
                     
                     // Update side/picker gravity in case it changed
+                    sidePanelView?.let { panel -> applyPanelCardStyle(panel) }
                     val isRightSide = panelPrefs.panelSide == PanelPreferences.SIDE_RIGHT
-                    sidePanelView?.let { panel ->
-                        val lp = panel.layoutParams as? android.widget.FrameLayout.LayoutParams
-                        if (lp != null) {
-                            lp.gravity = if (isRightSide) Gravity.END or Gravity.CENTER_VERTICAL
-                                         else Gravity.START or Gravity.CENTER_VERTICAL
-                            panel.layoutParams = lp
-                        }
-                    }
                     pickerPanelView?.let { picker ->
                         val lp = picker.layoutParams as? android.widget.FrameLayout.LayoutParams
                         if (lp != null) {
@@ -321,6 +315,16 @@ class FloatingPanelService : Service() {
             ACTION_UPDATE_IMMERSIVE -> {
                 isImmersiveMode = intent?.getBooleanExtra("is_immersive", false) ?: false
                 edgeHandleView?.isImmersiveMode = isImmersiveMode
+            }
+            PanelAccessibilityService.ACTION_IME_STATE -> {
+                // The handle overlay would swallow touches on keyboard keys; hide it while an IME shows
+                isImeVisible = intent?.getBooleanExtra("visible", false) ?: false
+                if (isImeVisible) {
+                    removeView(edgeHandleView)
+                    edgeHandleView = null
+                } else {
+                    addEdgeHandle(forceRecreate = false)
+                }
             }
             ACTION_SHOW_TEMP -> {
                 addEdgeHandle(forceRecreate = false)
@@ -554,7 +558,7 @@ class FloatingPanelService : Service() {
         // If neither Accessibility is ON nor Native Automation is POSSIBLE, we must NOT show the handle.
         val hasActiveEngine = isAccessibilityServiceEnabled() || (panelPrefs.useAutomationForGestures && AutomationManager.isAutomationPossible())
 
-        if (!anyTriggerEnabled || (panelPrefs.onlyOnHome && !isCurrentPackageLauncher()) || !hasActiveEngine) {
+        if (!anyTriggerEnabled || (panelPrefs.onlyOnHome && !isCurrentPackageLauncher()) || !hasActiveEngine || isImeVisible) {
             removeView(edgeHandleView)
             edgeHandleView = null
             return
@@ -712,6 +716,35 @@ class FloatingPanelService : Service() {
     private val sideRect = android.graphics.Rect()
     private val pickerRect = android.graphics.Rect()
 
+    /**
+     * Applies panel container geometry per theme: MagicOS renders as a floating
+     * card (wrap-content height with vertical margins), other themes as a
+     * full-height edge column.
+     */
+    private fun applyPanelCardStyle(panel: View) {
+        val lp = panel.layoutParams as? android.widget.FrameLayout.LayoutParams ?: return
+        val isRight = panelPrefs.panelSide == PanelPreferences.SIDE_RIGHT
+        lp.width = android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        lp.gravity = if (isRight) Gravity.END or Gravity.CENTER_VERTICAL
+                     else Gravity.START or Gravity.CENTER_VERTICAL
+        if (panelPrefs.uiTheme == PanelPreferences.THEME_MAGICOS) {
+            lp.height = android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+            val vertical = dpToPx(48)
+            val horizontal = dpToPx(8)
+            lp.topMargin = vertical
+            lp.bottomMargin = vertical
+            lp.marginStart = horizontal
+            lp.marginEnd = horizontal
+        } else {
+            lp.height = android.widget.FrameLayout.LayoutParams.MATCH_PARENT
+            lp.topMargin = 0
+            lp.bottomMargin = 0
+            lp.marginStart = 0
+            lp.marginEnd = 0
+        }
+        panel.layoutParams = lp
+    }
+
     private fun initRootLayout() {
         if (rootLayout != null) return
 
@@ -866,13 +899,8 @@ class FloatingPanelService : Service() {
         updateBlur(true)
         sidePanelView?.updateStyles() // Evaluate Game Mode columns & update layout
         sidePanelView?.let { panel ->
+            applyPanelCardStyle(panel)
             val isRight = panelPrefs.panelSide == PanelPreferences.SIDE_RIGHT
-            val lp = panel.layoutParams as android.widget.FrameLayout.LayoutParams
-            lp.width = android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
-            lp.height = android.widget.FrameLayout.LayoutParams.MATCH_PARENT
-            lp.gravity = if (isRight) Gravity.END or Gravity.CENTER_VERTICAL
-                         else Gravity.START or Gravity.CENTER_VERTICAL
-            panel.layoutParams = lp
             panel.alpha = 0f
             panel.translationX = if (isRight) 1000f else -1000f
             panel.visibility = View.VISIBLE
