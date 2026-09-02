@@ -1,0 +1,184 @@
+# Review package: 4399cbe..8dddf18
+
+## Commits
+8dddf18 feat(recents): add hide-from-Recents toggle in misc settings
+
+## Files changed
+ .../sidebar/panel/MiscellaneousSettingsActivity.kt  | 21 +++++++++++++++++++++
+ app/src/main/res/layout/activity_settings_misc.xml  | 18 ++++++++++++++++++
+ app/src/main/res/values-es/strings.xml              |  2 ++
+ app/src/main/res/values-zh/strings.xml              |  2 ++
+ app/src/main/res/values/strings.xml                 |  2 ++
+ 5 files changed, 45 insertions(+)
+
+## Diff
+diff --git a/app/src/main/java/com/imi/smartedge/sidebar/panel/MiscellaneousSettingsActivity.kt b/app/src/main/java/com/imi/smartedge/sidebar/panel/MiscellaneousSettingsActivity.kt
+index d962f9a..66699e3 100644
+--- a/app/src/main/java/com/imi/smartedge/sidebar/panel/MiscellaneousSettingsActivity.kt
++++ b/app/src/main/java/com/imi/smartedge/sidebar/panel/MiscellaneousSettingsActivity.kt
+@@ -57,20 +57,41 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
+ 
+         binding.featureHideNotification.isChecked = panelPrefs.hideServiceNotification
+         binding.featureHideNotification.setOnCheckedChangeListener { _, isChecked ->
+             panelPrefs.hideServiceNotification = isChecked
+             // ACTION_REFRESH applies/strips the foreground notification immediately
+             startService(Intent(this, FloatingPanelService::class.java).apply {
+                 action = FloatingPanelService.ACTION_REFRESH
+             })
+         }
+ 
++        // Kotlin local vals are out of scope inside their own initializer, so the
++        // self-referencing rollback listener needs a two-step var assignment.
++        var hideRecentsListener: android.widget.CompoundButton.OnCheckedChangeListener? = null
++        hideRecentsListener = android.widget.CompoundButton.OnCheckedChangeListener { _, isChecked ->
++            val previous = panelPrefs.hideFromRecents
++            try {
++                RecentsHideHelper.apply(this, isChecked)
++                panelPrefs.hideFromRecents = isChecked
++            } catch (e: Exception) {
++                // Roll the preference and the switch back on ROMs where component
++                // switching fails; re-checking fires the listener again, so detach it first.
++                panelPrefs.hideFromRecents = previous
++                binding.featureHideRecents.setOnCheckedChangeListener(null)
++                binding.featureHideRecents.isChecked = previous
++                binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
++                binding.root.showModernToast("Couldn't change Recents visibility: ${e.message}")
++            }
++        }
++        binding.featureHideRecents.isChecked = panelPrefs.hideFromRecents
++        binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
++
+         binding.btnExportSettings.setOnClickListener {
+             exportSettingsToDownloads()
+         }
+ 
+         binding.btnImportSettings.setOnClickListener {
+             importFilePicker.launch("application/json")
+         }
+     }
+ 
+     private fun updateLanguageLabel() {
+diff --git a/app/src/main/res/layout/activity_settings_misc.xml b/app/src/main/res/layout/activity_settings_misc.xml
+index fa594b5..7dc210a 100644
+--- a/app/src/main/res/layout/activity_settings_misc.xml
++++ b/app/src/main/res/layout/activity_settings_misc.xml
+@@ -90,20 +90,38 @@
+                         android:paddingVertical="12dp" />
+ 
+                     <TextView
+                         android:layout_width="match_parent"
+                         android:layout_height="wrap_content"
+                         android:text="@string/misc_hide_notification_desc"
+                         android:textColor="?attr/colorOnSurfaceVariant"
+                         android:textSize="14sp"
+                         android:layout_marginBottom="8dp" />
+ 
++                    <!-- Hide from Recents -->
++                    <com.google.android.material.materialswitch.MaterialSwitch
++                        android:id="@+id/feature_hide_recents"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:text="@string/misc_hide_recents_label"
++                        android:textColor="?attr/colorOnSurface"
++                        android:textSize="16sp"
++                        android:paddingVertical="12dp" />
++
++                    <TextView
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:text="@string/misc_hide_recents_desc"
++                        android:textColor="?attr/colorOnSurfaceVariant"
++                        android:textSize="14sp"
++                        android:layout_marginBottom="8dp" />
++
+                 </LinearLayout>
+             </com.google.android.material.card.MaterialCardView>
+ 
+             <!-- Section: Backup & Restore -->
+             <TextView
+                 style="@style/App_SectionTitle"
+                 android:text="@string/misc_section_backup"
+                 android:layout_marginTop="24dp" />
+ 
+             <com.google.android.material.card.MaterialCardView
+diff --git a/app/src/main/res/values-es/strings.xml b/app/src/main/res/values-es/strings.xml
+index 8225c70..670b495 100644
+--- a/app/src/main/res/values-es/strings.xml
++++ b/app/src/main/res/values-es/strings.xml
+@@ -141,20 +141,22 @@
+     
+     <string name="status_service_active">El servicio está activo</string>
+     <string name="status_automation_stopped">Automatización detenida</string>
+     <string name="apps_selected_singular">1 aplicación seleccionada</string>
+     <string name="apps_selected_plural">%d aplicaciones seleccionadas</string>
+ 
+     <string name="misc_section_general">General</string>
+     <string name="misc_app_language">Idioma de la App</string>
+     <string name="misc_hide_notification_label">Ocultar notificación</string>
+     <string name="misc_hide_notification_desc">Ejecuta el servicio sin notificación persistente; la permanencia depende del servicio de accesibilidad</string>
++    <string name="misc_hide_recents_label">Ocultar de apps recientes</string>
++    <string name="misc_hide_recents_desc">Oculta la app de las apps recientes para evitar que el panel se cierre al limpiar la memoria; surte efecto en el próximo inicio. El icono puede actualizarse brevemente al cambiarlo</string>
+     <string name="misc_section_backup">Copia de Seguridad</string>
+     <string name="misc_export_title">Exportar Ajustes</string>
+     <string name="misc_export_desc">Guardar configuración en el almacenamiento</string>
+     <string name="misc_import_title">Importar Ajustes</string>
+     <string name="misc_import_desc">Restaurar desde una copia JSON</string>
+ 
+     <string name="dialog_reset_title">¿Restablecer Ajustes?</string>
+     <string name="dialog_reset_msg">Esto restaurará todas las configuraciones y tus aplicaciones del panel a sus valores originales.</string>
+     <string name="btn_reset">Restablecer</string>
+     <string name="toast_reset_success">Ajustes restablecidos con éxito</string>
+diff --git a/app/src/main/res/values-zh/strings.xml b/app/src/main/res/values-zh/strings.xml
+index a86a2e4..25030d0 100644
+--- a/app/src/main/res/values-zh/strings.xml
++++ b/app/src/main/res/values-zh/strings.xml
+@@ -141,20 +141,22 @@
+ 
+     <string name="status_service_active">服务运行中</string>
+     <string name="status_automation_stopped">自动化已停止</string>
+     <string name="apps_selected_singular">已选择 1 个应用</string>
+     <string name="apps_selected_plural">已选择 %d 个应用</string>
+ 
+     <string name="misc_section_general">通用</string>
+     <string name="misc_app_language">应用语言</string>
+     <string name="misc_hide_notification_label">隐藏状态栏通知</string>
+     <string name="misc_hide_notification_desc">面板服务不以常驻通知运行,保活依赖无障碍服务(系统深度清理后需重新打开应用)</string>
++    <string name="misc_hide_recents_label">从最近任务隐藏</string>
++    <string name="misc_hide_recents_desc">将应用从最近任务中隐藏,防止清理后台时误杀侧边栏;对新启动生效。切换开关时桌面图标可能短暂刷新,属正常现象</string>
+     <string name="misc_section_backup">备份与恢复</string>
+     <string name="misc_export_title">导出设置</string>
+     <string name="misc_export_desc">将配置保存到内部存储</string>
+     <string name="misc_import_title">导入设置</string>
+     <string name="misc_import_desc">从之前的 JSON 备份恢复</string>
+ 
+     <string name="dialog_reset_title">重置所有设置?</string>
+     <string name="dialog_reset_msg">此操作将把所有配置和侧边栏应用恢复为默认状态。</string>
+     <string name="btn_reset">重置</string>
+     <string name="toast_reset_success">设置已成功重置</string>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index ef740a6..b66d4c2 100644
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -140,20 +140,22 @@
+     
+     <string name="status_service_active">Service is Active</string>
+     <string name="status_automation_stopped">Automation Stopped</string>
+     <string name="apps_selected_singular">1 app selected</string>
+     <string name="apps_selected_plural">%d apps selected</string>
+ 
+     <string name="misc_section_general">General</string>
+     <string name="misc_app_language">App Language</string>
+     <string name="misc_hide_notification_label">Hide Status Bar Notification</string>
+     <string name="misc_hide_notification_desc">Run the panel service without a persistent notification; keep-alive then relies on the Accessibility service</string>
++    <string name="misc_hide_recents_label">Hide from Recents</string>
++    <string name="misc_hide_recents_desc">Keeps the panel alive by hiding this app from Recents; takes effect on next launch. The home-screen icon may briefly refresh when toggled</string>
+     <string name="misc_section_backup">Backup &amp; Restore</string>
+     <string name="misc_export_title">Export Settings</string>
+     <string name="misc_export_desc">Save setup to internal storage</string>
+     <string name="misc_import_title">Import Settings</string>
+     <string name="misc_import_desc">Restore from a previous JSON backup</string>
+ 
+     <string name="dialog_reset_title">Reset All Settings?</string>
+     <string name="dialog_reset_msg">This will restore all configurations and your side panel apps to their original defaults.</string>
+     <string name="btn_reset">Reset</string>
+     <string name="toast_reset_success">Settings Reset Successfully</string>
