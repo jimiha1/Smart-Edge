@@ -1,0 +1,54 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 18:00 UTC daily = 02:00 Beijing time
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Merge upstream/main
+        id: merge
+        run: |
+          git remote add upstream https://github.com/Imtiaz-Official/Smart-Edge.git
+          git fetch upstream main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git merge upstream/main --no-edit; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push fast-forwardable sync
+        if: steps.merge.outputs.merged == 'true'
+        run: git push origin main
+
+      - name: Open PR for conflicted sync
+        if: steps.merge.outputs.merged == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="sync/upstream-$(date +%Y%m%d)"
+          git checkout -b "$BRANCH" upstream/main
+          git push origin "$BRANCH"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Sync upstream $(date +%Y-%m-%d) (conflicts with fork changes)" \
+            --body "Upstream changes could not be merged cleanly with the fork's local modifications. Resolve the conflicts here or locally, then merge." || true
+          echo "::warning::Upstream merge had conflicts - a PR was opened for manual resolution."
