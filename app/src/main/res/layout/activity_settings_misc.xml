@@ -97,6 +97,24 @@
                         android:textSize="14sp"
                         android:layout_marginBottom="8dp" />
 
+                    <!-- Hide from Recents -->
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/feature_hide_recents"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/misc_hide_recents_label"
+                        android:textColor="?attr/colorOnSurface"
+                        android:textSize="16sp"
+                        android:paddingVertical="12dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/misc_hide_recents_desc"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textSize="14sp"
+                        android:layout_marginBottom="8dp" />
+
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

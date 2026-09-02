@@ -64,6 +64,27 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
             })
         }
 
+        // Kotlin local vals are out of scope inside their own initializer, so the
+        // self-referencing rollback listener needs a two-step var assignment.
+        var hideRecentsListener: android.widget.CompoundButton.OnCheckedChangeListener? = null
+        hideRecentsListener = android.widget.CompoundButton.OnCheckedChangeListener { _, isChecked ->
+            val previous = panelPrefs.hideFromRecents
+            try {
+                RecentsHideHelper.apply(this, isChecked)
+                panelPrefs.hideFromRecents = isChecked
+            } catch (e: Exception) {
+                // Roll the preference and the switch back on ROMs where component
+                // switching fails; re-checking fires the listener again, so detach it first.
+                panelPrefs.hideFromRecents = previous
+                binding.featureHideRecents.setOnCheckedChangeListener(null)
+                binding.featureHideRecents.isChecked = previous
+                binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
+                binding.root.showModernToast("Couldn't change Recents visibility: ${e.message}")
+            }
+        }
+        binding.featureHideRecents.isChecked = panelPrefs.hideFromRecents
+        binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
+
         binding.btnExportSettings.setOnClickListener {
             exportSettingsToDownloads()
         }
