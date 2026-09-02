@@ -60,13 +60,43 @@ class PanelAccessibilityService : AccessibilityService() {
         const val ACTION_NOTIFICATIONS = "com.imi.smartedge.sidebar.panel.ACTION_NOTIFICATIONS"
         const val ACTION_QUICK_SETTINGS = "com.imi.smartedge.sidebar.panel.ACTION_QUICK_SETTINGS"
         const val ACTION_LOCK_SCREEN = "com.imi.smartedge.sidebar.panel.ACTION_LOCK_SCREEN"
-        
+        const val ACTION_IME_STATE = "com.imi.smartedge.sidebar.panel.ACTION_IME_STATE"
+
         const val EXTRA_PKG = "pkg"
         const val EXTRA_MODE = "mode"
-        
+
         @Volatile
         var isRunning = false
             private set
+    }
+
+    // --- IME visibility tracking ---
+    // The edge handle is an overlay that sits above the keyboard and swallows
+    // touches on the keys it covers, so it must be hidden while an IME shows.
+    // Open signal: TYPE_WINDOW_STATE_CHANGED from the IME window (class android.inputmethodservice.*).
+    // Close signal: the next non-IME window event — when a keyboard closes, another
+    // window always comes to front (verified on API 35: the launcher re-announces itself).
+    private var lastImeVisible = false
+
+    private fun setImeVisible(visible: Boolean) {
+        if (visible == lastImeVisible) return
+        lastImeVisible = visible
+        android.util.Log.d(TAG, "IME visibility: $visible")
+        val intent = Intent(this, FloatingPanelService::class.java).apply {
+            action = ACTION_IME_STATE
+            putExtra("visible", visible)
+        }
+        startService(intent)
+    }
+
+    private fun checkImeVisibilityFromEvent(event: AccessibilityEvent) {
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val className = event.className?.toString() ?: return
+        if (className.contains("InputMethod", ignoreCase = true)) {
+            setImeVisible(true)
+        } else if (lastImeVisible && event.packageName?.toString() != packageName) {
+            setImeVisible(false)
+        }
     }
 
     override fun onServiceConnected() {
@@ -167,7 +197,9 @@ class PanelAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
-        
+
+        checkImeVisibilityFromEvent(event)
+
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
             if (packageName == lastPackageName) return

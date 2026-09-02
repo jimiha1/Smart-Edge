@@ -62,10 +62,11 @@ class AppearanceSettingsActivity : AppCompatActivity() {
         }
 
         binding.tvUIStyleValue.text = when (panelPrefs.uiTheme) {
-            PanelPreferences.THEME_HYPEROS -> "HyperOS (Glass)"
-            PanelPreferences.THEME_REALME -> "Realme UI"
-            PanelPreferences.THEME_RICH -> "Rich UI (Glow)"
-            else -> "OriginOS (Rounded)"
+            PanelPreferences.THEME_HYPEROS -> getString(R.string.theme_hyperos)
+            PanelPreferences.THEME_REALME -> getString(R.string.theme_realme)
+            PanelPreferences.THEME_RICH -> getString(R.string.theme_rich)
+            PanelPreferences.THEME_MAGICOS -> getString(R.string.theme_magicos)
+            else -> getString(R.string.theme_origin)
         }
 
         binding.tvIconShapeValue.text = when (panelPrefs.iconShape) {
@@ -82,7 +83,9 @@ class AppearanceSettingsActivity : AppCompatActivity() {
         
         binding.featureHideBg.isChecked = panelPrefs.hideBackground
         
-        binding.tvColumnsValue.text = "${panelPrefs.panelColumns} Column${if (panelPrefs.panelColumns > 1) "s" else ""}"
+        binding.tvColumnsValue.text = resources.getQuantityString(
+            R.plurals.panel_columns_count, panelPrefs.panelColumns, panelPrefs.panelColumns
+        )
         
         binding.featureCustomAccent.isChecked = panelPrefs.useCustomAccent
         
@@ -190,25 +193,36 @@ class AppearanceSettingsActivity : AppCompatActivity() {
         }
 
         binding.layoutUIStyle.setOnClickListener {
-            val options = arrayOf("OriginOS (Rounded)", "HyperOS (Glass)", "Realme UI", "Rich UI (Glow)")
+            val options = arrayOf(
+                getString(R.string.theme_origin),
+                getString(R.string.theme_hyperos),
+                getString(R.string.theme_realme),
+                getString(R.string.theme_rich),
+                getString(R.string.theme_magicos)
+            )
             val values = arrayOf(
                 PanelPreferences.THEME_ORIGIN,
                 PanelPreferences.THEME_HYPEROS,
                 PanelPreferences.THEME_REALME,
-                PanelPreferences.THEME_RICH
+                PanelPreferences.THEME_RICH,
+                PanelPreferences.THEME_MAGICOS
             )
-            
+
             val selectedIndex = values.indexOf(panelPrefs.uiTheme).let { if (it == -1) 0 else it }
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("Panel UI Style")
+                .setTitle(getString(R.string.ui_style_theme))
                 .setSingleChoiceItems(options, selectedIndex) { dialog, which ->
                     panelPrefs.uiTheme = values[which]
+                    // MagicOS relies on frosted glass; turn blur on so the theme looks right
+                    if (values[which] == PanelPreferences.THEME_MAGICOS && !panelPrefs.blurEnabled && !panelPrefs.hideBackground) {
+                        panelPrefs.blurEnabled = true
+                    }
                     binding.tvUIStyleValue.text = options[which]
                     applyOnly()
                     dialog.dismiss()
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(android.R.string.cancel), null)
                 .show()
         }
 
@@ -253,22 +267,24 @@ class AppearanceSettingsActivity : AppCompatActivity() {
         }
 
         binding.featureColumns.setOnClickListener {
-            val options = arrayOf("1 Column", "2 Columns")
-            val currentSelectedIndex = (panelPrefs.panelColumns - 1).coerceIn(0, 1)
+            val options = (1..3).map {
+                resources.getQuantityString(R.plurals.panel_columns_count, it, it)
+            }.toTypedArray()
+            val currentSelectedIndex = (panelPrefs.panelColumns - 1).coerceIn(0, options.size - 1)
             var newlySelectedIndex = currentSelectedIndex
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("Panel Columns")
+                .setTitle(getString(R.string.panel_columns))
                 .setSingleChoiceItems(options, currentSelectedIndex) { _, which ->
                     newlySelectedIndex = which
                 }
-                .setPositiveButton("Apply") { _, _ ->
+                .setPositiveButton(getString(R.string.btn_save)) { _, _ ->
                     val columns = newlySelectedIndex + 1
                     panelPrefs.panelColumns = columns
                     binding.tvColumnsValue.text = options[newlySelectedIndex]
                     applyOnly()
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(android.R.string.cancel), null)
                 .show()
         }
 

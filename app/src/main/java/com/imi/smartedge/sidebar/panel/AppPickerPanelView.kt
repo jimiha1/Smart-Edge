@@ -347,7 +347,7 @@ class AppPickerPanelView @JvmOverloads constructor(
         if (isEditMode == enabled) return
         isEditMode = enabled
         tvHeader.text = if (isEditMode) "Manage Smart Edge" else "All Apps"
-        btnEdit.text = if (isEditMode) "DONE" else "EDIT"
+        btnEdit.text = if (isEditMode) context.getString(R.string.picker_done) else context.getString(R.string.picker_edit)
         
         val accentColor = try {
             if (panelPrefs.useCustomAccent) Color.parseColor(panelPrefs.accentColor)

@@ -65,6 +65,15 @@ class PanelAppsAdapter(
         forceFreeform = force
     }
 
+    private var labelColor: Int = android.graphics.Color.parseColor("#D9FFFFFF")
+
+    fun setLabelColor(color: Int) {
+        if (labelColor != color) {
+            labelColor = color
+            notifyDataSetChanged()
+        }
+    }
+
     fun setColumns(cols: Int) {
         if (currentColumns != cols) {
             currentColumns = cols
@@ -139,10 +148,10 @@ class PanelAppsAdapter(
         
         if (holder is AppViewHolder) {
             // Restore original sizes + scaling
-            var baseIconSize = if (isRich) 44 else 40
-            if (currentColumns == 2) baseIconSize = (baseIconSize * 1.1).toInt() // 10% larger in 2-col
-            
-            val baseTextSize = if (isRich) 9f else 8f
+            var baseIconSize = if (currentColumns >= 2) 52 else 48
+            if (isRich) baseIconSize += 4
+
+            val baseTextSize = if (currentColumns >= 2) 11.5f else 11f
 
             holder.ivIcon.layoutParams.let { lp ->
                 lp.width = (context.dpToPx(baseIconSize) * scale).toInt()
@@ -150,15 +159,17 @@ class PanelAppsAdapter(
                 holder.ivIcon.layoutParams = lp
             }
             holder.tvName.textSize = baseTextSize * scale
-            
-            // Keep app labels white for the dark floating panel
-            holder.tvName.setTextColor(android.graphics.Color.parseColor("#D9FFFFFF"))
 
-            // Adjust padding for 2-column mode to look more centered
-            if (currentColumns == 2) {
-                holder.itemView.setPadding(context.dpToPx(8), holder.itemView.paddingTop, context.dpToPx(8), holder.itemView.paddingBottom)
+            holder.tvName.setTextColor(labelColor)
+            // Soft shadow keeps labels crisp on frosted glass (dark shadow for light text, light for dark text)
+            val lum = (android.graphics.Color.red(labelColor) + android.graphics.Color.green(labelColor) + android.graphics.Color.blue(labelColor)) / 3
+            holder.tvName.setShadowLayer(2f, 0f, 1f, if (lum < 128) 0x4DFFFFFF else 0x59000000.toInt())
+
+            // Adjust padding for multi-column mode to look more centered
+            if (currentColumns >= 2) {
+                holder.itemView.setPadding(context.dpToPx(10), holder.itemView.paddingTop, context.dpToPx(10), holder.itemView.paddingBottom)
             } else {
-                holder.itemView.setPadding(context.dpToPx(2), holder.itemView.paddingTop, context.dpToPx(2), holder.itemView.paddingBottom)
+                holder.itemView.setPadding(context.dpToPx(4), holder.itemView.paddingTop, context.dpToPx(4), holder.itemView.paddingBottom)
             }
 
             // Fetch from mutableApps so it stays synchronous with rapid dragging
@@ -317,7 +328,7 @@ class PanelAppsAdapter(
                 true
             }
         } else if (holder is AddViewHolder) {
-            val baseIconSize = 40
+            val baseIconSize = 48
             holder.ivAdd.layoutParams.let { lp ->
                 lp.width = (context.dpToPx(baseIconSize) * scale).toInt()
                 lp.height = (context.dpToPx(baseIconSize) * scale).toInt()

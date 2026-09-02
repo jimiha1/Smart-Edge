@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity(), android.content.SharedPreferences.OnSh
             binding.btnStartStopClassic.backgroundTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#F1C40F"))
             binding.btnStartStopClassic.setTextColor(Color.WHITE)
 
-            binding.tvStatus.text = "Accessibility Required"
+            binding.tvStatus.text = getString(R.string.status_accessibility_required)
             binding.tvStatus.setTextColor(Color.parseColor("#F1C40F"))
             binding.statusDot.imageTintList = android.content.res.ColorStateList.valueOf(Color.parseColor("#F1C40F"))
         } else {

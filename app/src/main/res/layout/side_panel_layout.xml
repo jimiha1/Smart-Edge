@@ -95,7 +95,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="PWR"
+                android:text="@string/panel_btn_pwr"
                 android:textColor="#80FFFFFF"
                 android:textSize="9sp"
                 android:layout_marginTop="2dp"
@@ -126,7 +126,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="VOL +"
+                android:text="@string/panel_btn_vol_up"
                 android:textColor="#80FFFFFF"
                 android:textSize="9sp"
                 android:layout_marginTop="2dp"
@@ -147,7 +147,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="VOL -"
+                android:text="@string/panel_btn_vol_down"
                 android:textColor="#80FFFFFF"
                 android:textSize="9sp"
                 android:layout_marginTop="2dp"
@@ -177,7 +177,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="BRI +"
+                android:text="@string/panel_btn_bri_up"
                 android:textColor="#80FFFFFF"
                 android:textSize="9sp"
                 android:layout_marginTop="2dp"
@@ -197,7 +197,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="BRI -"
+                android:text="@string/panel_btn_bri_down"
                 android:textColor="#80FFFFFF"
                 android:textSize="9sp"
                 android:layout_marginTop="2dp"
@@ -219,7 +219,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="SC"
+            android:text="@string/panel_btn_sc"
             android:textColor="#80FFFFFF"
             android:textSize="9sp"
             android:layout_marginTop="2dp"
@@ -238,14 +238,14 @@
                 android:id="@+id/tvRamUsage"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="RAM: --"
+                android:text="@string/panel_ram_default"
                 android:textColor="#B3FFFFFF"
                 android:textSize="10sp" />
             <TextView
                 android:id="@+id/tvBatTemp"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="BAT: --"
+                android:text="@string/panel_bat_default"
                 android:textColor="#B3FFFFFF"
                 android:textSize="10sp" />
         </LinearLayout>

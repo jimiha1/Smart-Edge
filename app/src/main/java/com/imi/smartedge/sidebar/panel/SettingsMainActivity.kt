@@ -154,11 +154,11 @@ class SettingsMainActivity : AppCompatActivity() {
     }
 
     private fun getCategoryFromLayout(layoutId: Int): String = when (layoutId) {
-        R.layout.activity_settings_appearance -> "Appearance"
-        R.layout.activity_settings_interaction -> "Interaction"
-        R.layout.activity_settings_handle -> "Handle"
-        R.layout.activity_settings_tools -> "Tools"
-        else -> "General"
+        R.layout.activity_settings_appearance -> getString(R.string.section_appearance)
+        R.layout.activity_settings_interaction -> getString(R.string.section_interaction)
+        R.layout.activity_settings_handle -> getString(R.string.section_handle)
+        R.layout.activity_settings_tools -> getString(R.string.section_tools)
+        else -> getString(R.string.section_general)
     }
 
     private fun setupSearch() {
@@ -255,7 +255,7 @@ class SettingsMainActivity : AppCompatActivity() {
             val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Imtiaz-Official/Smart-Edge"))
             startActivity(intent)
         } catch (e: Exception) {
-            binding.root.showModernToast("Could not open browser")
+            binding.root.showModernToast(getString(R.string.toast_browser_error))
         }
     }
 

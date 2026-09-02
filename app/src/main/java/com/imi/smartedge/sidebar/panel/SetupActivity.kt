@@ -21,6 +21,10 @@ class SetupActivity : AppCompatActivity() {
         updateUI()
     }
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(LocaleHelper.onAttach(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivitySetupBinding.inflate(layoutInflater)
@@ -101,7 +105,7 @@ class SetupActivity : AppCompatActivity() {
             AutomationManager.isShizukuAvailable() -> " (Shizuku)"
             else -> ""
         }
-        binding.titleAutomation.text = "Native Gesture$status"
+        binding.titleAutomation.text = getString(R.string.setup_automation_title) + status
         updateCardState(binding.cardAutomation, binding.actionAutomation, hasAutomation)
         
         // Auto-start is hard to detect on most OEMs, but we can detect on MIUI
@@ -126,10 +130,10 @@ class SetupActivity : AppCompatActivity() {
         binding.btnGrantAll.isEnabled = !allGranted
         
         if (allGranted) {
-            binding.btnGrantAll.text = "All granted"
+            binding.btnGrantAll.text = getString(R.string.setup_all_granted)
             binding.btnGrantAll.alpha = 0.5f
         } else {
-            binding.btnGrantAll.text = "Grant all"
+            binding.btnGrantAll.text = getString(R.string.setup_grant_all)
             binding.btnGrantAll.alpha = 1.0f
         }
     }
