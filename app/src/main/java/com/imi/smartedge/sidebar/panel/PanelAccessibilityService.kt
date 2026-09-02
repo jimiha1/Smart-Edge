@@ -99,6 +99,33 @@ class PanelAccessibilityService : AccessibilityService() {
         }
     }
 
+    // --- Launcher redraw fallback ---
+    // Some OEM launchers (e.g. MagicOS) do not reliably post a WINDOW_STATE_CHANGED
+    // event when returning home, leaving the onlyOnHome handle hidden. Launcher
+    // content changes (icon/widget redraw) fire right after it becomes visible,
+    // so they serve as a backup "we are on home" signal.
+    private var cachedLauncherPkgs: Set<String> = emptySet()
+    private var launcherPkgsCachedAt = 0L
+    private var lastLauncherContentRefresh = 0L
+
+    private fun onLauncherContentEvent(pkg: String) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - launcherPkgsCachedAt > 30_000) {
+            launcherPkgsCachedAt = now
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            cachedLauncherPkgs = packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                .map { it.activityInfo.packageName }
+                .toSet()
+        }
+        if (pkg !in cachedLauncherPkgs) return
+        if (now - lastLauncherContentRefresh < 800) return
+        lastLauncherContentRefresh = now
+        val refresh = Intent(this, FloatingPanelService::class.java).apply {
+            action = FloatingPanelService.ACTION_REFRESH
+        }
+        startService(refresh)
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
@@ -199,6 +226,10 @@ class PanelAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         checkImeVisibilityFromEvent(event)
+
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            event.packageName?.toString()?.let { onLauncherContentEvent(it) }
+        }
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
