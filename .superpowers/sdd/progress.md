@@ -33,3 +33,4 @@ Fix run 3: complete (commit 6d691fd, re-review approved G1-G6; final review cond
 Final whole-branch review: 'merge with fixes' -> conditions met by fix run 3
 RIDE-list (documented, not blocking): hardcoded en toast (file-wide style), pref-write rollback asymmetry, nullable listener var, Recents 1-3s flash (platform), mid-toggle task kill (platform, now disclosed in copy)
 Follow-up before next release: API<=34 emulator smoke test; lint baseline cleanup (55 pre-existing errors)
+Device acceptance (Honor BKQ-AN10, MagicOS): user manual test passed; system AlertWindow notification identified as informational (channel blockable, removal independent of function). Merged to main.
