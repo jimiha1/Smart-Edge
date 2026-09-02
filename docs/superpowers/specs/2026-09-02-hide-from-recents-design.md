@@ -1,7 +1,7 @@
 # 设计：从最近任务隐藏（防止侧边栏被误杀）
 
 日期：2026-09-02
-状态：已与用户确认（方案 A：双 activity-alias + 组件启停；含服务加固）
+状态：已与用户确认（方案 A：双 activity-alias + 组件启停；含服务加固）。实现期发现见文末附录。
 
 ## 背景与问题
 
@@ -145,3 +145,14 @@ object RecentsHideHelper {
 5. `MiscellaneousSettingsActivity.kt` + 对应布局 — 新 Switch。
 6. `values/strings.xml`、`values-es/strings.xml`、`values-zh/strings.xml` — 文案。
 7. `app/src/main/res/xml/shortcuts.xml` — 确认目标组件不受别名影响（只读检查）。
+
+## 附录：实现期发现（2026-09-02，模拟器验收后）
+
+模拟器（API 35）验收发现原设计的两个假设不成立，实际机制已调整：
+
+1. **D1**：API 35 上系统忽略 activity-alias 声明的 `excludeFromRecents`（`dumpsys` 证实 `isExcluded=false`）；但任务创建时 baseIntent 携带运行时 `FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS` 有效。`FLAG_ACTIVITY_CLEAR_TASK` 自重启也无法改写已存在任务的 baseIntent。
+2. **D2**：未完成设置时 `MainActivity` 转发到 `SetupActivity` 并 `finish()`，使 SetupActivity 成为无 flag 的新任务根。
+
+实际机制（commit d0e4a10）：`RecentsHideHelper.ensureExcluded(activity)` 在 `MainActivity`/`SetupActivity` 的 `onCreate` 首行调用——任务根自检 flag 与偏好是否一致，不一致时通过 MULTIPLE_TASK + 别名定向自重启生成携带正确 flag 的新任务根，并用 `ActivityManager.getAppTasks()` 清理陈旧任务（toggle 双向调和：开→加 flag，关→去 flag）。V1–V5 验收全部通过。
+
+遗留（下次会话处理）：relaunch 路径的 `finishAndRemoveTask`/`startActivity` 需包异常防护（Important）；若干 Minor 见 `.superpowers/sdd/progress.md`。
