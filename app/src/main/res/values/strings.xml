@@ -147,6 +147,8 @@
     <string name="misc_app_language">App Language</string>
     <string name="misc_hide_notification_label">Hide Status Bar Notification</string>
     <string name="misc_hide_notification_desc">Run the panel service without a persistent notification; keep-alive then relies on the Accessibility service</string>
+    <string name="misc_hide_recents_label">Hide from Recents</string>
+    <string name="misc_hide_recents_desc">Keeps the panel alive by hiding this app from Recents; takes effect on next launch. The home-screen icon may briefly refresh when toggled</string>
     <string name="misc_section_backup">Backup &amp; Restore</string>
     <string name="misc_export_title">Export Settings</string>
     <string name="misc_export_desc">Save setup to internal storage</string>
