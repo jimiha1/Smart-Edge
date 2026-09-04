@@ -85,6 +85,7 @@ class PanelPreferences(context: Context) {
         private const val KEY_SWIPE_SENSITIVITY = "swipe_sensitivity"
         private const val KEY_USE_AUTOMATION_FOR_GESTURES = "use_automation_for_gestures"
         private const val KEY_ONLY_ON_HOME = "only_on_home"
+        private const val KEY_DEBUG_LOG = "debug_log_enabled"
         private const val KEY_FAVORITE_APP = "favorite_app_package"
         private const val KEY_NOTCH_GESTURES_ENABLED = "notch_gestures_enabled"
         private const val KEY_NOTCH_TAP_ACTION = "notch_tap_action"
@@ -696,6 +697,11 @@ class PanelPreferences(context: Context) {
     var onlyOnHome: Boolean
         get() = prefs.getBoolean(KEY_ONLY_ON_HOME, false)
         set(value) = prefs.edit { putBoolean(KEY_ONLY_ON_HOME, value) }
+
+    /** Device-level debug logging switch (see DebugLog); not part of backup export. */
+    var debugLogEnabled: Boolean
+        get() = prefs.getBoolean(KEY_DEBUG_LOG, false)
+        set(value) = prefs.edit { putBoolean(KEY_DEBUG_LOG, value) }
 
     var favoriteAppPackage: String
         get() = prefs.getString(KEY_FAVORITE_APP, "") ?: ""
