@@ -80,12 +80,13 @@ object DebugLog {
             (if (cur.exists()) cur.readText() else "")
     }
 
+    @Suppress("DEPRECATION") // versionCode fallback below is guarded for API < 28
     private fun header() {
         val ctx = appContext ?: return
         val prefs = PanelPreferences(ctx)
         val version = runCatching {
             val pi = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
-            "${pi.versionName}(${pi.versionCode})"
+            "${pi.versionName}(${if (android.os.Build.VERSION.SDK_INT >= 28) pi.longVersionCode else pi.versionCode.toLong()})"
         }.getOrDefault("?")
         DebugLog.i(
             "DebugLog",
@@ -102,9 +103,10 @@ object DebugLog {
     private fun enqueue(tag: String, msg: String, tr: Throwable?) {
         if (!enabled) return
         val h = handler ?: return
-        val ts = lineTs.format(Date())
+        val at = System.currentTimeMillis()
+        val tid = Thread.currentThread().id
         val body = if (tr != null) "$msg\n${stackToString(tr)}" else msg
-        h.post { append("$ts T${Thread.currentThread().id} $tag: $body") }
+        h.post { append("${lineTs.format(Date(at))} T$tid $tag: $body") }
     }
 
     private fun append(line: String) {
