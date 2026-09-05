@@ -34,3 +34,18 @@ Final whole-branch review: 'merge with fixes' -> conditions met by fix run 3
 RIDE-list (documented, not blocking): hardcoded en toast (file-wide style), pref-write rollback asymmetry, nullable listener var, Recents 1-3s flash (platform), mid-toggle task kill (platform, now disclosed in copy)
 Follow-up before next release: API<=34 emulator smoke test; lint baseline cleanup (55 pre-existing errors)
 Device acceptance (Honor BKQ-AN10, MagicOS): user manual test passed; system AlertWindow notification identified as informational (channel blockable, removal independent of function). Merged to main.
+
+## Feature: ime-fix-debug-log (plan 2026-09-05)
+Task 1: complete (commits cdb62ed..defb2e6 via ad4891a+fix, review clean after F1-F3 fix; minor noted: readAll up to 4MB I/O - Task 4 wraps in thread; benign shutdown race; idle HandlerThread persists by design)
+Task 2: complete (commits defb2e6..dc52ff4, review clean)
+  Minors: empty-set sentinel defeats 30s cache (theoretical), filter=ime label could mask systemui InputMethod-class events (label only), win log sits after lastPackageName dedup (by design)
+Task 3: complete (commits dc52ff4..e46d506, review clean; named-risk was false alarm in implementer report - code short-circuits correctly)
+  Minors: task-3-report inaccuracy (isLauncher call does NOT run when onlyOnHome off - disregard report note), isLauncher= by=empty|own lines lack fg= suffix (grep accordingly), whitespace-only edits in isCurrentPackageLauncher (fork merge noise)
+Task 4: complete (commits e46d506..679967c via c3f97ee+fix, review clean after H1-H2 fix)
+  Minors: settings-export failure toast lost e.message detail (generic msg now; Log.w added), trailing divider last in General card (visual nit), DebugLog.session converts to applicationContext (leak concern resolved by controller - Task 1 code does context.applicationContext)
+Task 5 (emulator): PASS after D1 fix (commits 679967c..a7d2c9d re-verified - all items green, report emu5-report.md)
+  D1: Settings.Secure.ENABLED_INPUT_METHODS unreadable targetSdk 34+ -> SecurityException crash loop; fixed via InputMethodManager.enabledInputMethodList (a7d2c9d, review approved)
+  Benign observations: 34ms SHOW->remove race on IME open (not user-visible), pre-existing FloatingPanelService churn in own settings pages, registerPinnedShortcut caught IllegalArgumentException every MainActivity onCreate (pre-existing)
+Task 5 (device): DEFERRED to user daily use (phone disconnected); code path identical to emulator-verified by=imePkg
+Final review J1-J4: complete (commit df2a7b5, re-review approved; branch READY TO MERGE)
+IMPORTANT: phone currently has STALE build (installed at 679967c, contains D1 crash loop) - MUST reinstall latest APK when phone reconnects

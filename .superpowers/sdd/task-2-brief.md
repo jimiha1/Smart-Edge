@@ -1,135 +1,148 @@
-### Task 2: Runtime switching engine (PanelPreferences + RecentsHideHelper + app-start sync)
+### Task 2: IME detection fix + accessibility instrumentation
 
 **Files:**
-- Modify: `app/src/main/java/com/imi/smartedge/sidebar/panel/PanelPreferences.kt` (companion constants near line 39; property near line 640)
-- Create: `app/src/main/java/com/imi/smartedge/sidebar/panel/RecentsHideHelper.kt`
-- Modify: `app/src/main/java/com/imi/smartedge/sidebar/panel/SidePanelApp.kt` (onCreate, after `applyAppTheme(this)` at line 17)
+- Modify: `app/src/main/java/com/imi/smartedge/sidebar/panel/PanelAccessibilityService.kt` (IME tracking block ~lines 75–100; foreground filter block ~lines 232–280; `onLauncherContentEvent` ~lines 112–127)
 
 **Interfaces:**
-- Consumes: alias component names produced by Task 1.
-- Produces (used by Task 3):
-  - `PanelPreferences.hideFromRecents: Boolean` — custom var, default `true`
-  - `RecentsHideHelper.apply(context: Context, hidden: Boolean)` — flips both aliases; throws on PackageManager failure
-  - `RecentsHideHelper.sync(context: Context)` — no-op or correction toward the preference
+- Consumes: `DebugLog.i(tag, msg)` (Task 1).
+- Produces: `setImeVisible(visible: Boolean, by: String)` (private; callers within this file only). Behavior: IME-visible detection matches any enabled IME's package.
 
-- [ ] **Step 1: Add the preference constant**
+- [ ] **Step 1: Add the enabled-IME cache**
 
-In `PanelPreferences` companion object, next to `KEY_HIDE_NOTIFICATION` (line ~39):
+Below the existing `lastImeVisible` declaration (line ~79), add:
 
 ```kotlin
-        private const val KEY_HIDE_NOTIFICATION = "hide_service_notification"
-        private const val KEY_HIDE_FROM_RECENTS = "hide_from_recents"
+    // --- Enabled-IME package cache ---
+    // Third-party keyboards (WeChat wetype, Doubao, Baidu…) post window events
+    // whose className does NOT contain "InputMethod" (their services are named
+    // e.g. .ImeService / .WxHldService), so detection primarily matches the
+    // event package against ALL enabled IME packages. Verified on-device
+    // 2026-09-05: none of the user's IMEs match the old className heuristic.
+    private var cachedImePackages: Set<String> = emptySet()
+    private var imePkgsCachedAt = 0L
+
+    private fun enabledImePackages(): Set<String> {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (cachedImePackages.isEmpty() || now - imePkgsCachedAt > 30_000) {
+            imePkgsCachedAt = now
+            val raw = android.provider.Settings.Secure.getString(
+                contentResolver,
+                android.provider.Settings.Secure.ENABLED_INPUT_METHODS
+            ) ?: ""
+            cachedImePackages = raw.split(':')
+                .filter { it.isNotBlank() }
+                .map { it.substringBefore('/') }
+                .toSet()
+        }
+        return cachedImePackages
+    }
 ```
 
-- [ ] **Step 2: Add the property accessor**
+- [ ] **Step 2: Fix setImeVisible + checkImeVisibilityFromEvent**
 
-Immediately after the existing `hideServiceNotification` property (line ~640):
-
-```kotlin
-    /**
-     * Exclude the app's task from Recents (default on). Implemented by toggling
-     * the launcher activity-aliases — see RecentsHideHelper. Not part of backup
-     * export: it is device-level UI state, like hideServiceNotification.
-     */
-    var hideFromRecents: Boolean
-        get() = prefs.getBoolean(KEY_HIDE_FROM_RECENTS, true)
-        set(value) = prefs.edit { putBoolean(KEY_HIDE_FROM_RECENTS, value) }
-```
-
-- [ ] **Step 3: Create RecentsHideHelper.kt**
-
-New file `app/src/main/java/com/imi/smartedge/sidebar/panel/RecentsHideHelper.kt` (flat package, matching `*Helper` naming):
+Replace the current `setImeVisible` (~line 81) and `checkImeVisibilityFromEvent` (~line 91) with:
 
 ```kotlin
-package com.imi.smartedge.sidebar.panel
-
-import android.content.ComponentName
-import android.content.Context
-import android.content.pm.PackageManager
-
-/**
- * Switches the manifest launcher entry between the LauncherHidden and
- * LauncherVisible activity-aliases so the app's task can be excluded from
- * Recents at runtime. This prevents the panel service from being
- * swipe-killed on OEM ROMs that terminate the process when a task card
- * is dismissed. Only one alias is enabled at a time; both share the
- * application icon/label, so the home-screen icon looks unchanged.
- */
-object RecentsHideHelper {
-
-    private fun hiddenAlias(context: Context) =
-        ComponentName(context, "${context.packageName}.LauncherHidden")
-
-    private fun visibleAlias(context: Context) =
-        ComponentName(context, "${context.packageName}.LauncherVisible")
-
-    /**
-     * Enables exactly one of the two launcher aliases. Pass hidden = true to
-     * exclude the app's task from Recents. Uses DONT_KILL_APP so the running
-     * foreground service is not restarted by the switch.
-     */
-    fun apply(context: Context, hidden: Boolean) {
-        val pm = context.packageManager
-        pm.setComponentEnabledSetting(
-            hiddenAlias(context),
-            if (hidden) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            PackageManager.DONT_KILL_APP
-        )
-        pm.setComponentEnabledSetting(
-            visibleAlias(context),
-            if (hidden) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-            else PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-            PackageManager.DONT_KILL_APP
-        )
+    private fun setImeVisible(visible: Boolean, by: String) {
+        if (visible == lastImeVisible) return
+        lastImeVisible = visible
+        DebugLog.i(TAG, "ime ${!visible}->$visible by=$by")
+        android.util.Log.d(TAG, "IME visibility: $visible ($by)")
+        val intent = Intent(this, FloatingPanelService::class.java).apply {
+            action = ACTION_IME_STATE
+            putExtra("visible", visible)
+        }
+        startService(intent)
     }
 
-    /**
-     * Reconciles alias component state with the hideFromRecents preference.
-     * Covers drift such as component state surviving an app-data clear, or a
-     * partially-applied switch. Safe to call on every app start; it is a no-op
-     * when the states already agree (DEFAULT state counts as the manifest
-     * default, which matches the preference default).
-     */
-    fun sync(context: Context) {
-        val hidden = PanelPreferences(context).hideFromRecents
-        val pm = context.packageManager
-        val wantHidden = if (hidden) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-        else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-        val wantVisible = if (hidden) PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-        else PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-        val hiddenOk = pm.getComponentEnabledSetting(hiddenAlias(context)) == wantHidden
-        val visibleOk = pm.getComponentEnabledSetting(visibleAlias(context)) == wantVisible
-        if (!hiddenOk || !visibleOk) apply(context, hidden)
+    private fun checkImeVisibilityFromEvent(event: AccessibilityEvent) {
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val className = event.className?.toString() ?: return
+        val pkg = event.packageName?.toString()
+        val byImePackage = pkg != null && pkg in enabledImePackages()
+        if (byImePackage || className.contains("InputMethod", ignoreCase = true)) {
+            setImeVisible(true, if (byImePackage) "imePkg" else "cls")
+        } else if (lastImeVisible && pkg != packageName) {
+            setImeVisible(false, "nonImeEvent")
+        }
     }
-}
 ```
 
-- [ ] **Step 4: Sync on app start**
+Keep the existing explanatory comment block above `lastImeVisible`; update its "Open signal" line to: `// Open signal: TYPE_WINDOW_STATE_CHANGED from the IME window — matched by event package (any enabled IME) or className containing "InputMethod".`
 
-In `SidePanelApp.onCreate()`, immediately after `applyAppTheme(this)` (line 17):
+- [ ] **Step 3: Replace the foreground-tracking filter**
+
+In `onAccessibilityEvent`'s TYPE_WINDOW_STATE_CHANGED branch, replace the block that reads `DEFAULT_INPUT_METHOD`, computes `imePackage`/`isSystemPkg`, and guards `panelPrefs.currentForegroundPackage = packageName` (current lines ~239–262) with:
 
 ```kotlin
-        // Apply the saved theme mode
-        applyAppTheme(this)
+            val className = event.className?.toString() ?: ""
 
-        // Keep launcher alias components in sync with the hideFromRecents preference
-        // (corrects drift, e.g. component state surviving an app-data clear)
-        RecentsHideHelper.sync(this)
+            val myPkg = this@PanelAccessibilityService.packageName
+            val isSystemPkg = packageName == "android" || packageName == "com.android.systemui"
+            val isImePkg = packageName in enabledImePackages()
+
+            // Window classification for tracking + debug logs. Only real app
+            // windows become "foreground": system overlays, IME windows (any
+            // enabled IME — third-party keyboards don't use "InputMethod"
+            // class names) and our own package must not pollute
+            // currentForegroundPackage, or the onlyOnHome launcher check may
+            // treat a stale/system package as "home" and re-show the handle.
+            val filter = when {
+                isImePkg || className.contains("InputMethod", ignoreCase = true) -> "ime"
+                isSystemPkg -> "system"
+                packageName == myPkg -> "own"
+                else -> "app"
+            }
+
+            DebugLog.i(
+                TAG, "win pkg=$packageName cls=${className.take(40)} filter=$filter" +
+                    (if (filter == "app" && panelPrefs.currentForegroundPackage != packageName)
+                        " fgChange=${panelPrefs.currentForegroundPackage}->$packageName" else "")
+            )
+
+            if (filter == "app") {
+                panelPrefs.currentForegroundPackage = packageName
+            }
+```
+
+Then replace the close-panel condition right below (current `if (packageName != "com.imi.smartedge.sidebar.panel" && packageName != imePackage && !isSystemPkg)`) with:
+
+```kotlin
+            if (filter == "app") {
+```
+
+(its body — sending ACTION_CLOSE_PANEL + ACTION_REFRESH when `panelPrefs.serviceEnabled` — stays unchanged). The now-unused `defaultIme`/`imePackage` locals must be deleted.
+
+- [ ] **Step 4: Instrument the launcher fallback**
+
+In `onLauncherContentEvent`, replace the throttle block:
+
+```kotlin
+        if (pkg !in cachedLauncherPkgs) return
+        if (now - lastLauncherContentRefresh < 800) return
+        lastLauncherContentRefresh = now
+```
+
+with:
+
+```kotlin
+        if (pkg !in cachedLauncherPkgs) return
+        val throttled = now - lastLauncherContentRefresh < 800
+        DebugLog.i(TAG, "launcherContent pkg=$pkg throttled=$throttled")
+        if (throttled) return
+        lastLauncherContentRefresh = now
 ```
 
 - [ ] **Step 5: Build to verify**
 
 Run: `./gradlew assembleDebug`
-Expected: `BUILD SUCCESSFUL`.
+Expected: `BUILD SUCCESSFUL` (a leftover reference to the deleted `imePackage` local is the likely failure — remove it).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add app/src/main/java/com/imi/smartedge/sidebar/panel/PanelPreferences.kt \
-        app/src/main/java/com/imi/smartedge/sidebar/panel/RecentsHideHelper.kt \
-        app/src/main/java/com/imi/smartedge/sidebar/panel/SidePanelApp.kt
-git commit -m "feat(recents): runtime alias switching engine (RecentsHideHelper)"
+git add app/src/main/java/com/imi/smartedge/sidebar/panel/PanelAccessibilityService.kt
+git commit -m "fix(ime): detect any enabled IME package, not just InputMethod class names"
 ```
 
 ---

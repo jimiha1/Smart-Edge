@@ -1,56 +1,84 @@
-# Task 3 Report: Settings UI — hide-from-Recents toggle in Miscellaneous settings
+# Task 3 Report: FloatingPanelService instrumentation + session restore
 
-## What was implemented
+**Commit:** `e46d506` — `feat(log): instrument handle show/hide gates and service lifecycle`
+**Branch:** `feat/ime-fix-debug-log` (base: `dc52ff4`)
+**File changed:** `app/src/main/java/com/imi/smartedge/sidebar/panel/FloatingPanelService.kt` (+36 / -6)
 
-All five files from the brief, with the exact strings/XML/Kotlin it specifies:
+(Note: this file previously held a Task 3 report from an earlier feature branch's plan; overwritten for the current ime-fix-debug-log plan.)
 
-1. **`app/src/main/res/values/strings.xml`** — added `misc_hide_recents_label` ("Hide from Recents") and `misc_hide_recents_desc` verbatim, immediately after `misc_hide_notification_desc`.
-2. **`app/src/main/res/values-es/strings.xml`** — Spanish translations verbatim from the brief, same position.
-3. **`app/src/main/res/values-zh/strings.xml`** — Chinese translations verbatim from the brief, same position.
-4. **`app/src/main/res/layout/activity_settings_misc.xml`** — added `feature_hide_recents` MaterialSwitch + desc TextView directly after the `misc_hide_notification_desc` TextView, inside the same General card, mirroring the `feature_hide_notification` block's structure/attributes exactly (XML verbatim from the brief).
-5. **`app/src/main/java/com/imi/smartedge/sidebar/panel/MiscellaneousSettingsActivity.kt`** — wired the toggle in `onCreate()` after the `featureHideNotification` block: listener calls `RecentsHideHelper.apply(this, isChecked)` inside try/catch (load-bearing: `apply` throws on PackageManager failure), persists `panelPrefs.hideFromRecents` on success; on failure rolls the pref back, detaches the listener, resets `isChecked`, re-attaches, and toasts. Initial `isChecked = panelPrefs.hideFromRecents` is assigned **before** `setOnCheckedChangeListener` so the programmatic set does not fire the listener.
+## What was implemented (post-edit line numbers)
 
-**One necessary deviation from the brief's verbatim Kotlin** (flagged as a concern below): the brief declared the listener as `val hideRecentsListener = ... { ... }` while also referencing `hideRecentsListener` inside the catch block to re-attach it. Kotlin local vals are not in scope within their own initializer lambda, so this fails to compile:
+### Step 1: Session restore + lifecycle logs
+- `onCreate`, after `applyNotificationVisibility()` (line 160): inserted blank line, comment
+  "Resume file logging after process restarts when the preference is on", `DebugLog.session(this)`
+  (line 163), `DebugLog.i(TAG, "service onCreate")` (line 164). Verbatim per brief.
+- `onDestroy` (line 451): `DebugLog.i(TAG, "service onDestroy")` added as first line of the body
+  (line 452, before `super.onDestroy()`). `onDestroy` exists in this file, so the brief's
+  skip-condition did not apply.
 
-```
-e: MiscellaneousSettingsActivity.kt:78:71 Unresolved reference: hideRecentsListener
-```
+### Step 2: Log service actions
+- `onStartCommand` (line 211): `DebugLog.i(TAG, "action=${intent?.action}")` added as first line
+  (line 212), before the existing `val action = intent?.action`.
 
-Minimal fix applied: two-step nullable-var assignment (`var hideRecentsListener: ...OnCheckedChangeListener? = null` then assignment), with a two-line comment explaining why. The listener body, ordering, rollback semantics, and attach-after-initial-assignment behavior are unchanged from the brief. `setOnCheckedChangeListener`'s platform-type parameter accepts the nullable reference.
+### Step 3: isCurrentPackageLauncher match-branch logging
+- Function at line 510: full body replaced verbatim with the brief's version. Signature unchanged
+  (`private fun isCurrentPackageLauncher(): Boolean`), FallbackHome comment retained
+  (lines 524-526). Early-return branch now logs `isLauncher=true by=empty|own` (line 513); the
+  match path computes `by` via `when` (default / anyLauncher / systemui / none) and logs
+  `isLauncher=<bool> by=<by> fg=<pkg>` (line 536), returning `by != "none"`.
+- Logic equivalence check: old return was `currentPkg == homePkg || allLaunchers.contains(currentPkg) || currentPkg == "com.android.systemui"`; new `by != "none"` is the same disjunction with short-circuit ordering preserved.
+
+### Step 4: Gate snapshot in addEdgeHandle
+- Line 589: `val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()` — computed
+  exactly once, before the log. Lines 590-595: the `DebugLog.i` gate snapshot
+  (`triggers=... isLauncher=... engine=... imeVis=... fg=... => HIDE|SHOW`). Line 596: gate
+  condition rewritten to use `isLauncher` instead of the inline `onlyOnHome && !isCurrentPackageLauncher()`.
+- Short-circuit note: the brief's rewrite intentionally calls `isCurrentPackageLauncher()` even
+  when `onlyOnHome` is off (so the match branch is always logged) — per-spec.
+
+### Step 5: Gate snapshot in ACTION_REFRESH branch
+- Inside `serviceScope.launch` in the ACTION_REFRESH handling: line 265 computes `isLauncher` once;
+  lines 266-268 rewrite `shouldShowHandle` to use `!isLauncher`; lines 269-275 add the
+  `DebugLog.i` snapshot (`refresh handle=... landscape=... onlyOnHome=... isLauncher=... imeVis=... fg=...`).
+- `isImeVisible` is a service-level property (line 60), in scope inside the coroutine.
 
 ## Verification
 
-Command: `./gradlew assembleDebug lint` from `D:\Smart-Edge` (JDK 17, Git Bash), with the known `~/.gradle/init.d/mirrors.gradle` init-script workaround (moved aside for the run, restored after every run).
+Command (mirrors.gradle workaround applied and restored around the run):
 
-- **assembleDebug**: passed. Quoted line: `BUILD SUCCESSFUL in 1s` (standalone re-run; in the combined `assembleDebug lint` run the `:app:assembleDebug` task completed successfully before lint failed).
-- **lint (lintDebug)**: `BUILD FAILED` — "Lint found 55 errors, 658 warnings". **All 55 errors are pre-existing on HEAD of this branch and unrelated to this task.** Evidence (controlled stash test):
-  - Stashed the 5 changed files, ran `lintDebug` on HEAD → 55 errors, BUILD FAILED.
-  - Restored changes, re-ran → 55 errors, BUILD FAILED.
-  - Normalized diff of both error lists (`sed 's/:[0-9]*:/:/' | sort | diff`) → **empty; identical error sets**. Warning sets (658 each) also identical.
-  - No error references `misc_hide_recents*`, `activity_settings_misc.xml`, or `MiscellaneousSettingsActivity.kt`. Pre-existing errors are things like `UseAppTint` in unrelated layouts, `MissingPermission` in `PanelTileService.kt`, `RestrictedApi` in `Extensions.kt`, and `MissingTranslation` for ~25 long-untranslated Spanish strings (`section_panel_experience`, `feature_landscape_*`, etc.) that predate this branch's tasks.
-  - My two new strings are present in all three locales (no MissingTranslation) and referenced by the layout (no UnusedResources) — the lint failure classes the brief warned about do not occur for this change.
+```bash
+mv ~/.gradle/init.d/mirrors.gradle ~/.gradle/init.d/mirrors.gradle.bak
+./gradlew assembleDebug
+mv ~/.gradle/init.d/mirrors.gradle.bak ~/.gradle/init.d/mirrors.gradle
+```
 
-Lint was therefore already failing on this branch before Task 3; the brief's expectation of "BUILD SUCCESSFUL for both" does not match the branch's actual state. Since fixing 55 pre-existing repo-wide lint errors (many requiring layout attribute rewrites or translating 25 strings) is far outside this task's scope and would contaminate the commit, I committed with zero-new-lint-issues evidence instead.
+Result:
 
-## Files changed (commit `8dddf18`)
+```
+BUILD SUCCESSFUL in 5s
+36 actionable tasks: 5 executed, 31 up-to-date
+```
 
-- `D:\Smart-Edge\app\src\main\res\values\strings.xml`
-- `D:\Smart-Edge\app\src\main\res\values-es\strings.xml`
-- `D:\Smart-Edge\app\src\main\res\values-zh\strings.xml`
-- `D:\Smart-Edge\app\src\main\res\layout\activity_settings_misc.xml`
-- `D:\Smart-Edge\app\src\main\java\com\imi\smartedge\sidebar\panel\MiscellaneousSettingsActivity.kt`
+Only pre-existing Kotlin warnings (deprecated `ACTION_CLOSE_SYSTEM_DIALOGS`, unnecessary safe
+calls on smart-cast intents, unused params) — none introduced by this change; `~/.gradle/init.d/`
+confirmed restored to `mirrors.gradle` after the run.
 
-Commit: `8dddf18` `feat(recents): add hide-from-Recents toggle in misc settings` — 5 files, 45 insertions, exactly the files listed in the brief's commit step.
+## Files changed
+- `D:\Smart-Edge\app\src\main\java\com\imi\smartedge\sidebar\panel\FloatingPanelService.kt` (only file in the commit)
 
-## Self-review
+## Self-review findings
+- All 5 insertion points landed; verified via `grep -n 'isCurrentPackageLauncher|DebugLog'`:
+  exactly one `isCurrentPackageLauncher()` call per decision point (lines 265 and 589), each stored
+  in a local `isLauncher` — no double calls, no double logging.
+- 7 `DebugLog.i` sites + 1 `DebugLog.session` site, matching the brief exactly; nothing extra added.
+- Only incidental diff beyond the brief's snippets: two blank lines inside `isCurrentPackageLauncher`
+  lost trailing whitespace (came from pasting the brief's verbatim replacement block — expected).
+- No import needed: `DebugLog` lives in the same flat package; `isImeVisible`/`panelPrefs`/`TAG` all in scope.
+- `RecentsHideHelper` was not touched (per task note).
 
-- Completeness vs brief: all 5 steps done; strings verbatim in all three locales; XML verbatim and structurally mirroring the `featureHideNotification` block; Kotlin wired at the specified insertion point with attach-after-initial-`isChecked` ordering. Nothing extra added.
-- Interfaces consumed as specified: `PanelPreferences.hideFromRecents` (verified at `PanelPreferences.kt:644`), `RecentsHideHelper.apply(context, hidden)` (verified at `RecentsHideHelper.kt:28`), ViewBinding `binding.featureHideRecents` resolves (compilation proves it).
-- Rollback path re-attaches the same listener instance after resetting `isChecked`, so subsequent user toggles keep working after a failure.
-- Unrelated pre-existing working-tree state (`AGENTS.md` modification, untracked `app/src/main/java/com/imi/smartedge/sidebar/panel/.superpowers/`) was left out of the commit intentionally.
-
-## Issues / concerns
-
-1. **Brief's Kotlin snippet does not compile as written** — self-referencing local `val` inside its own initializer lambda (`Unresolved reference`). Deviation documented above; behavior identical to the brief's intent.
-2. **`lint` cannot reach BUILD SUCCESSFUL on this branch even without this change** (55 pre-existing errors, `abortOnError = true`). Earlier tasks on this branch could not have passed a full `./gradlew lint` either. If the team wants green lint, that needs a dedicated cleanup task (or a lint baseline).
-3. Minor: the failure toast string "Couldn't change Recents visibility: ..." is hardcoded English in Kotlin, matching the file's existing hardcoded-toast style (`showModernToast` calls in this activity are all hardcoded English) — consistent with the codebase, noted for completeness.
+## Issues or concerns
+- None blocking. One behavioral note (per-spec): Steps 4/5 make `isCurrentPackageLauncher()` run on
+  every `addEdgeHandle()`/refresh decision even when `onlyOnHome` is disabled; with logging off this
+  is zero-cost, with logging on it adds one PackageManager query per handle decision — intended by
+  the brief so the `by=...` branch is always observable.
+- Step 5's snapshot has no `=> SHOW/HIDE` marker like Step 4 (matches brief verbatim; `handle=$shouldShowHandle` conveys the outcome).
