@@ -273,6 +273,26 @@ class PanelAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Authoritative foreground: the package of the active window in the
+     * accessibility window list (needs flagRetrieveInteractiveWindows).
+     * The launcher and its overlay pages (e.g. MagicOS hiboard) re-announce
+     * themselves with window events DURING app-launch animations, so
+     * "last event wins" tracking lets the foreground flip back to the
+     * launcher while the user is already inside the app — showing the
+     * onlyOnHome handle over that app (verified 2026-09-05 19:47:29,
+     * exported log). The active window is the system's own notion of what
+     * is focused; window events only trigger the re-check. Returns null
+     * when the list is unusable (retrieval flag not active on this service
+     * binding yet) — callers then fall back to the event package.
+     */
+    private fun authoritativeForeground(): String? {
+        val list = windows
+        if (list.isEmpty()) return null
+        val active = list.firstOrNull { it.isActive } ?: return null
+        return active.packageName?.toString()
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
@@ -283,11 +303,17 @@ class PanelAccessibilityService : AccessibilityService() {
         }
 
         if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            val packageName = event.packageName?.toString() ?: return
-            if (packageName == lastPackageName) return
-            lastPackageName = packageName
+            val eventPkg = event.packageName?.toString() ?: return
+            if (eventPkg == lastPackageName) return
+            lastPackageName = eventPkg
 
             val className = event.className?.toString() ?: ""
+
+            // Trust the active window over the event's package: launcher noise
+            // during app-launch animations must not flip the tracked
+            // foreground back to the launcher.
+            val activePkg = authoritativeForeground()
+            val packageName = activePkg ?: eventPkg
 
             val myPkg = this@PanelAccessibilityService.packageName
             val isSystemPkg = packageName == "android" || packageName == "com.android.systemui"
@@ -307,7 +333,8 @@ class PanelAccessibilityService : AccessibilityService() {
             }
 
             DebugLog.i(
-                TAG, "win pkg=$packageName cls=${className.take(40)} filter=$filter" +
+                TAG, "win pkg=$eventPkg cls=${className.take(40)} filter=$filter" +
+                    (if (activePkg != null && activePkg != eventPkg) " active=$activePkg" else "") +
                     (if (filter == "app" && panelPrefs.currentForegroundPackage != packageName)
                         " fgChange=${panelPrefs.currentForegroundPackage}->$packageName" else "")
             )
