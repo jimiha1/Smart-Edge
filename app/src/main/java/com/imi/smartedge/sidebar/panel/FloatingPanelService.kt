@@ -589,7 +589,7 @@ class FloatingPanelService : Service() {
         val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()
         DebugLog.i(
             TAG,
-            "handle gates: triggers=$anyTriggerEnabled isLauncher=$isLauncher " +
+            "handle gates: onlyOnHome=${panelPrefs.onlyOnHome} triggers=$anyTriggerEnabled isLauncher=$isLauncher " +
                 "engine=$hasActiveEngine imeVis=$isImeVisible fg=${panelPrefs.currentForegroundPackage} => " +
                 if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible) "HIDE" else "SHOW"
         )

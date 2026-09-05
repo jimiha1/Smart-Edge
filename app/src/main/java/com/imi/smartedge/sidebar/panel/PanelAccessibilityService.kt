@@ -124,7 +124,13 @@ class PanelAccessibilityService : AccessibilityService() {
         val byImePackage = pkg != null && pkg in enabledImePackages()
         if (byImePackage || className.contains("InputMethod", ignoreCase = true)) {
             setImeVisible(true, if (byImePackage) "imePkg" else "cls")
-        } else if (lastImeVisible && pkg != packageName) {
+        } else if (lastImeVisible && pkg != packageName &&
+            // System windows (volume dialog, shade) can come to front while the
+            // keyboard is still open; keyboard close is always followed by an
+            // app/launcher window re-announcing, so skipping system windows only
+            // delays the clear, never misses it.
+            pkg != "com.android.systemui" && pkg != "android"
+        ) {
             setImeVisible(false, "nonImeEvent")
         }
     }
@@ -148,10 +154,9 @@ class PanelAccessibilityService : AccessibilityService() {
                 .toSet()
         }
         if (pkg !in cachedLauncherPkgs) return
-        val throttled = now - lastLauncherContentRefresh < 800
-        DebugLog.i(TAG, "launcherContent pkg=$pkg throttled=$throttled")
-        if (throttled) return
+        if (now - lastLauncherContentRefresh < 800) return
         lastLauncherContentRefresh = now
+        DebugLog.i(TAG, "launcherContent pkg=$pkg refreshSent=true")
         val refresh = Intent(this, FloatingPanelService::class.java).apply {
             action = FloatingPanelService.ACTION_REFRESH
         }
