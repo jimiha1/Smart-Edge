@@ -73,15 +73,41 @@ class PanelAccessibilityService : AccessibilityService() {
     // --- IME visibility tracking ---
     // The edge handle is an overlay that sits above the keyboard and swallows
     // touches on the keys it covers, so it must be hidden while an IME shows.
-    // Open signal: TYPE_WINDOW_STATE_CHANGED from the IME window (class android.inputmethodservice.*).
+    // Open signal: TYPE_WINDOW_STATE_CHANGED from the IME window — matched by event package (any enabled IME) or className containing "InputMethod".
     // Close signal: the next non-IME window event — when a keyboard closes, another
     // window always comes to front (verified on API 35: the launcher re-announces itself).
     private var lastImeVisible = false
 
-    private fun setImeVisible(visible: Boolean) {
+    // --- Enabled-IME package cache ---
+    // Third-party keyboards (WeChat wetype, Doubao, Baidu…) post window events
+    // whose className does NOT contain "InputMethod" (their services are named
+    // e.g. .ImeService / .WxHldService), so detection primarily matches the
+    // event package against ALL enabled IME packages. Verified on-device
+    // 2026-09-05: none of the user's IMEs match the old className heuristic.
+    private var cachedImePackages: Set<String> = emptySet()
+    private var imePkgsCachedAt = 0L
+
+    private fun enabledImePackages(): Set<String> {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (cachedImePackages.isEmpty() || now - imePkgsCachedAt > 30_000) {
+            imePkgsCachedAt = now
+            val raw = android.provider.Settings.Secure.getString(
+                contentResolver,
+                android.provider.Settings.Secure.ENABLED_INPUT_METHODS
+            ) ?: ""
+            cachedImePackages = raw.split(':')
+                .filter { it.isNotBlank() }
+                .map { it.substringBefore('/') }
+                .toSet()
+        }
+        return cachedImePackages
+    }
+
+    private fun setImeVisible(visible: Boolean, by: String) {
         if (visible == lastImeVisible) return
         lastImeVisible = visible
-        android.util.Log.d(TAG, "IME visibility: $visible")
+        DebugLog.i(TAG, "ime ${!visible}->$visible by=$by")
+        android.util.Log.d(TAG, "IME visibility: $visible ($by)")
         val intent = Intent(this, FloatingPanelService::class.java).apply {
             action = ACTION_IME_STATE
             putExtra("visible", visible)
@@ -92,10 +118,12 @@ class PanelAccessibilityService : AccessibilityService() {
     private fun checkImeVisibilityFromEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val className = event.className?.toString() ?: return
-        if (className.contains("InputMethod", ignoreCase = true)) {
-            setImeVisible(true)
-        } else if (lastImeVisible && event.packageName?.toString() != packageName) {
-            setImeVisible(false)
+        val pkg = event.packageName?.toString()
+        val byImePackage = pkg != null && pkg in enabledImePackages()
+        if (byImePackage || className.contains("InputMethod", ignoreCase = true)) {
+            setImeVisible(true, if (byImePackage) "imePkg" else "cls")
+        } else if (lastImeVisible && pkg != packageName) {
+            setImeVisible(false, "nonImeEvent")
         }
     }
 
@@ -118,7 +146,9 @@ class PanelAccessibilityService : AccessibilityService() {
                 .toSet()
         }
         if (pkg !in cachedLauncherPkgs) return
-        if (now - lastLauncherContentRefresh < 800) return
+        val throttled = now - lastLauncherContentRefresh < 800
+        DebugLog.i(TAG, "launcherContent pkg=$pkg throttled=$throttled")
+        if (throttled) return
         lastLauncherContentRefresh = now
         val refresh = Intent(this, FloatingPanelService::class.java).apply {
             action = FloatingPanelService.ACTION_REFRESH
@@ -238,26 +268,34 @@ class PanelAccessibilityService : AccessibilityService() {
 
             val className = event.className?.toString() ?: ""
 
-            // Get the current active keyboard package
-            val defaultIme = android.provider.Settings.Secure.getString(
-                contentResolver,
-                android.provider.Settings.Secure.DEFAULT_INPUT_METHOD
-            )
-            val imePackage = defaultIme?.substringBefore("/") ?: ""
-
+            val myPkg = this@PanelAccessibilityService.packageName
             val isSystemPkg = packageName == "android" || packageName == "com.android.systemui"
+            val isImePkg = packageName in enabledImePackages()
 
-            // Only track real app windows as "foreground". System overlays (status bar,
-            // dialogs, toasts) and the IME post window events too; storing them would
-            // pollute currentForegroundPackage and make the onlyOnHome launcher check
-            // treat a stale system package as "home", re-showing the handle inside apps.
-            if (!isSystemPkg && packageName != imePackage &&
-                !className.contains("InputMethod", ignoreCase = true)
-            ) {
+            // Window classification for tracking + debug logs. Only real app
+            // windows become "foreground": system overlays, IME windows (any
+            // enabled IME — third-party keyboards don't use "InputMethod"
+            // class names) and our own package must not pollute
+            // currentForegroundPackage, or the onlyOnHome launcher check may
+            // treat a stale/system package as "home" and re-show the handle.
+            val filter = when {
+                isImePkg || className.contains("InputMethod", ignoreCase = true) -> "ime"
+                isSystemPkg -> "system"
+                packageName == myPkg -> "own"
+                else -> "app"
+            }
+
+            DebugLog.i(
+                TAG, "win pkg=$packageName cls=${className.take(40)} filter=$filter" +
+                    (if (filter == "app" && panelPrefs.currentForegroundPackage != packageName)
+                        " fgChange=${panelPrefs.currentForegroundPackage}->$packageName" else "")
+            )
+
+            if (filter == "app") {
                 panelPrefs.currentForegroundPackage = packageName
             }
 
-            if (packageName != "com.imi.smartedge.sidebar.panel" && packageName != imePackage && !isSystemPkg) {
+            if (filter == "app") {
                 if (panelPrefs.serviceEnabled) {
                     val closeIntent = Intent(this, FloatingPanelService::class.java).apply {
                         action = FloatingPanelService.ACTION_CLOSE_PANEL
