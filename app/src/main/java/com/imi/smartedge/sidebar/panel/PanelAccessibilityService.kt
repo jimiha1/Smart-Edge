@@ -84,6 +84,9 @@ class PanelAccessibilityService : AccessibilityService() {
     // e.g. .ImeService / .WxHldService), so detection primarily matches the
     // event package against ALL enabled IME packages. Verified on-device
     // 2026-09-05: none of the user's IMEs match the old className heuristic.
+    // The set comes from InputMethodManager.enabledInputMethodList: reading
+    // Settings.Secure.ENABLED_INPUT_METHODS throws SecurityException for apps
+    // targeting SDK 34+ (verified as a crash loop on an API 35 emulator).
     private var cachedImePackages: Set<String> = emptySet()
     private var imePkgsCachedAt = 0L
 
@@ -91,14 +94,13 @@ class PanelAccessibilityService : AccessibilityService() {
         val now = android.os.SystemClock.elapsedRealtime()
         if (cachedImePackages.isEmpty() || now - imePkgsCachedAt > 30_000) {
             imePkgsCachedAt = now
-            val raw = android.provider.Settings.Secure.getString(
-                contentResolver,
-                android.provider.Settings.Secure.ENABLED_INPUT_METHODS
-            ) ?: ""
-            cachedImePackages = raw.split(':')
-                .filter { it.isNotBlank() }
-                .map { it.substringBefore('/') }
-                .toSet()
+            cachedImePackages = runCatching {
+                val imm = getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                imm?.enabledInputMethodList
+                    ?.map { it.packageName }
+                    ?.toSet()
+                    ?: emptySet()
+            }.getOrDefault(emptySet())
         }
         return cachedImePackages
     }
