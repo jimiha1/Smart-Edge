@@ -94,6 +94,14 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
         binding.featureHideRecents.isChecked = panelPrefs.hideFromRecents
         binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
 
+        binding.featureDebugLog.isChecked = panelPrefs.debugLogEnabled
+        binding.featureDebugLog.setOnCheckedChangeListener { _, isChecked ->
+            panelPrefs.debugLogEnabled = isChecked
+            if (isChecked) DebugLog.session(this) else DebugLog.shutdown()
+        }
+
+        binding.btnExportLog.setOnClickListener { exportDebugLog() }
+
         binding.btnExportSettings.setOnClickListener {
             exportSettingsToDownloads()
         }
@@ -135,27 +143,22 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun exportSettingsToDownloads() {
-        try {
-            val json = panelPrefs.exportToJson()
-            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val fileName = "smartedge_backup_$timestamp.json"
-            val folderName = "SidePanel"
-
+    /** Writes text to Downloads/SidePanel/<fileName>; returns the display path or null on failure. */
+    private fun saveToDownloads(fileName: String, mimeType: String, content: String): String? {
+        val folderName = "SidePanel"
+        return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 // Scoped storage — write via MediaStore to Downloads/SidePanel/
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
                     put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/$folderName")
                 }
                 val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                if (uri != null) {
-                    contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
-                    binding.root.showModernToast("Saved to Downloads/$folderName/$fileName")
-                } else {
-                    binding.root.showModernToast("Export failed – could not create file")
-                }
+                    ?: return null
+                contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray()) }
+                    ?: return null
+                "Downloads/$folderName/$fileName"
             } else {
                 // Legacy — write directly to Downloads/SidePanel/
                 val dir = java.io.File(
@@ -163,12 +166,42 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
                     folderName
                 )
                 dir.mkdirs()
-                java.io.File(dir, fileName).writeText(json)
-                binding.root.showModernToast("Saved to Downloads/$folderName/$fileName")
+                java.io.File(dir, fileName).writeText(content)
+                "Downloads/$folderName/$fileName"
             }
         } catch (e: Exception) {
-            binding.root.showModernToast("Export failed: ${e.message}")
+            null
         }
+    }
+
+    private fun exportSettingsToDownloads() {
+        Thread {
+            val json = panelPrefs.exportToJson()
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val saved = saveToDownloads("smartedge_backup_$timestamp.json", "application/json", json)
+            runOnUiThread {
+                if (saved != null) binding.root.showModernToast("Saved to $saved")
+                else binding.root.showModernToast("Export failed – could not create file")
+            }
+        }.start()
+    }
+
+    private fun exportDebugLog() {
+        Thread {
+            val content = DebugLog.readAll(this)
+            if (content == null) {
+                runOnUiThread {
+                    binding.root.showModernToast("No logs yet - turn on Debug Logging first")
+                }
+                return@Thread
+            }
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val saved = saveToDownloads("smartedge_log_$timestamp.txt", "text/plain", content)
+            runOnUiThread {
+                if (saved != null) binding.root.showModernToast("Saved to $saved")
+                else binding.root.showModernToast("Export failed – could not create file")
+            }
+        }.start()
     }
 
     private fun applyGlobalRefresh() {
