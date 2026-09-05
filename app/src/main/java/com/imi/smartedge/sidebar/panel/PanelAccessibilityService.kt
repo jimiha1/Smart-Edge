@@ -3,6 +3,7 @@ package com.imi.smartedge.sidebar.panel
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityWindowInfo
 import android.util.Log
 
 class PanelAccessibilityService : AccessibilityService() {
@@ -119,19 +120,32 @@ class PanelAccessibilityService : AccessibilityService() {
 
     private fun checkImeVisibilityFromEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val className = event.className?.toString() ?: return
         val pkg = event.packageName?.toString()
+        val className = event.className?.toString() ?: ""
+        // Authoritative signal: the IME window's presence in the accessibility
+        // window list (needs flagRetrieveInteractiveWindows). Event-based
+        // clearing ("any non-IME window event means the keyboard closed")
+        // proved unreliable — while the keyboard is open the launcher itself
+        // posts window noise (e.g. a ListView), which wrongly cleared the
+        // state and re-showed the handle over the keyboard (verified
+        // 2026-09-05 17:56:57, exported log). Events only trigger the check;
+        // the window list decides.
+        val imeInWindows = windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
         val byImePackage = pkg != null && pkg in enabledImePackages()
-        if (byImePackage || className.contains("InputMethod", ignoreCase = true)) {
-            setImeVisible(true, if (byImePackage) "imePkg" else "cls")
-        } else if (lastImeVisible && pkg != packageName &&
-            // System windows (volume dialog, shade) can come to front while the
-            // keyboard is still open; keyboard close is always followed by an
-            // app/launcher window re-announcing, so skipping system windows only
-            // delays the clear, never misses it.
-            pkg != "com.android.systemui" && pkg != "android"
-        ) {
-            setImeVisible(false, "nonImeEvent")
+        when {
+            imeInWindows || byImePackage || className.contains("InputMethod", ignoreCase = true) ->
+                setImeVisible(true, when {
+                    byImePackage -> "imePkg"
+                    imeInWindows -> "windows"
+                    else -> "cls"
+                })
+            // Clear only on the authoritative list. If the list is unusable
+            // (empty — window retrieval unavailable on this ROM), fall back to
+            // the old heuristic, minus the known noise sources.
+            windows.isNotEmpty() -> setImeVisible(false, "windowsGone")
+            else -> if (lastImeVisible && pkg != packageName &&
+                pkg != "com.android.systemui" && pkg != "android"
+            ) setImeVisible(false, "nonImeEvent")
         }
     }
 
