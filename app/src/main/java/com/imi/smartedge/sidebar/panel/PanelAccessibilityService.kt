@@ -290,7 +290,9 @@ class PanelAccessibilityService : AccessibilityService() {
         val list = windows
         if (list.isEmpty()) return null
         val active = list.firstOrNull { it.isActive } ?: return null
-        return active.packageName?.toString()
+        // The window object itself exposes no package; the owning app is read
+        // from the window's root node (needs canRetrieveWindowContent).
+        return active.root?.packageName?.toString()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
