@@ -111,3 +111,4 @@ object DebugLog {
 
 1. **输入法包名集合改由 IMM 公开 API 获取（SecurityException）**：`Settings.Secure.ENABLED_INPUT_METHODS` 仅对 targetSdk ≤33 的应用可读；API 35 模拟器实测（SDK 34+ 目标）读取即抛 `SecurityException`，令 a11y 服务在每次 TYPE_WINDOW_STATE_CHANGED 上崩溃循环。实际实现改由公开 API `InputMethodManager.enabledInputMethodList` 取包名集合（`runCatching` 包裹、30 秒缓存不变），修复见 commit a7d2c9d。正文中「解析 `Settings.Secure.ENABLED_INPUT_METHODS`」的表述（「背景与问题」末条与「IME 检测修复」第 1 条）以本附录为准。
 2. **埋点 #3 日志位置调整**：原计划在每个 launcher content-changed 事件上记录 `throttled` 状态；终稿改为仅在通过 800ms 节流、真正发出 refresh 时记录 `refreshSent=true`——MagicOS 等 OEM 桌面该事件频率极高，逐条记录会迅速轮转掉 2MB 日志。
+3. **IME 可见性清除信号改为窗口列表权威判定（首次实机复现后）**：实机日志（2026-09-05 17:56:57，桌面搜索框 + 豆包输入法）证实事件式清除不可靠——键盘弹出 0.44 秒后，桌面自身发出的 ListView 窗口杂音被误判为「键盘收起」，把手在键盘仍打开时重新显示并挡住右侧打字。终稿改为：窗口事件仅作触发，真值来自无障碍窗口列表中是否存在 `AccessibilityWindowInfo.TYPE_INPUT_METHOD` 窗口（需 `flagRetrieveInteractiveWindows`，已加入服务配置，更新后需重新开启一次无障碍服务生效）；包名/className 匹配保留为打开信号的或条件，清除仅在窗口列表可用且不含 IME 窗口时进行，列表不可用时回退旧启发式。
