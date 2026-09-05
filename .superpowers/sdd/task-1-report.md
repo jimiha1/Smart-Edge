@@ -1,98 +1,76 @@
-# Task 1 Report: Manifest — dual launcher aliases + service hardening
+# Task 1 Report: DebugLog component + preference
 
-## What Was Implemented
+## Status: DONE
 
-Both manifest changes from the brief, applied verbatim to
-`D:\Smart-Edge\app\src\main\AndroidManifest.xml`:
+## What was implemented
 
-1. **Step 1 — MainActivity replaced with dual aliases.** The original
-   `<activity android:name=".MainActivity" android:exported="true">` block (with its
-   LAUNCHER intent-filter and `@xml/shortcuts` meta-data) was replaced with:
-   - `.MainActivity` as `android:exported="false"` with no intent-filter, preceded by the
-     brief's explanatory comment.
-   - `<activity-alias android:name=".LauncherHidden">` — `exported="true"`,
-     `enabled="true"`, `excludeFromRecents="true"`, MAIN/LAUNCHER intent-filter,
-     `@xml/shortcuts` meta-data (the default entry, matching hideFromRecents default = true).
-   - `<activity-alias android:name=".LauncherVisible">` — `exported="true"`,
-     `enabled="false"`, MAIN/LAUNCHER intent-filter, `@xml/shortcuts` meta-data
-     (alternate entry for when the user disables "Hide from Recents").
-   Comments included exactly as in the brief. Alias names `LauncherHidden` / `LauncherVisible`
-   match what Task 2's `RecentsHideHelper` will reference.
+Exactly per `task-1-brief.md`, all code used verbatim:
 
-2. **Step 2 — FloatingPanelService hardened.** `android:stopWithTask="false"` added
-   between `android:exported` and `android:foregroundServiceType` in the
-   `.FloatingPanelService` declaration, exactly as the brief's snippet. The
-   `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` property and everything else in the service block
-   are untouched.
-
-No other manifest content was modified — all `tools:ignore` annotations
-(`QueryAllPackagesPermission`, `ProtectedPermissions`), the `<queries>` block, and every
-other component declaration are byte-identical to before.
+1. **Step 1 — Branch**: created `feat/ime-fix-debug-log` from `main` (cdb62ed).
+2. **Step 2 — Preference** in `PanelPreferences.kt`:
+   - Added `private const val KEY_DEBUG_LOG = "debug_log_enabled"` in the companion object, directly below `KEY_ONLY_ON_HOME` (line 88).
+   - Added `var debugLogEnabled: Boolean` (get/set via `prefs`/`prefs.edit`, default `false`) with the brief's KDoc comment, immediately after the `onlyOnHome` property (line ~701).
+3. **Step 3 — `DebugLog.kt`** created at `app/src/main/java/com/imi/smartedge/sidebar/panel/DebugLog.kt` with the brief's code byte-identical (verified via `diff` — zero differences). Provides:
+   - `DebugLog.i(tag, msg)`
+   - `DebugLog.e(tag, msg, tr: Throwable? = null)`
+   - `DebugLog.session(context)` — starts HandlerThread + writes session header only when `debugLogEnabled` is on; calls `shutdown()` otherwise
+   - `DebugLog.shutdown()`
+   - `DebugLog.readAll(context): String?`
+   - Private: `header()`, `enqueue()`, `append()` (2 MB rotation to `smartedge.log.1`), `stackToString()`
+4. **Step 4 — Build** (with the known workaround: moved `~/.gradle/init.d/mirrors.gradle` → `.bak` before the run, restored after — verified restored).
+5. **Step 5 — Commit**: staged only the two brief-specified files, committed with the exact message.
 
 ## Verification
 
-Command: `./gradlew assembleDebug` from `D:\Smart-Edge` (Git Bash, JDK 17).
+Command: `./gradlew assembleDebug --console=plain` from `D:\Smart-Edge` (Git Bash, JDK 17; mirrors.gradle disabled per workaround, restored afterwards).
 
 Result line:
 
 ```
-BUILD SUCCESSFUL in 1m 41s
-36 actionable tasks: 36 executed
+BUILD SUCCESSFUL in 30s
+36 actionable tasks: 5 executed, 31 up-to-date
 ```
 
-Additional check beyond the brief: inspected the merged manifest at
-`app/build/intermediates/merged_manifests/debug/processDebugManifest/AndroidManifest.xml` —
-it contains `com.imi.smartedge.sidebar.panel.LauncherHidden` with
-`enabled="true"` / `excludeFromRecents="true"` / `exported="true"` and the MAIN/LAUNCHER
-intent-filter, `com.imi.smartedge.sidebar.panel.LauncherVisible`, and
-`android:stopWithTask="false"` on the service. Merging behaved as expected.
+One Kotlin warning during `:app:compileDebugKotlin` (warning only, not an error):
 
-## Commit
+```
+w: file:///D:/Smart-Edge/app/src/main/java/com/imi/smartedge/sidebar/panel/DebugLog.kt:88:37 'versionCode: Int' is deprecated. Deprecated in Java
+```
 
-- `991ef99` — `feat(recents): hide app task from Recents via dual launcher aliases`
-- 1 file changed, 28 insertions(+), 2 deletions(-). Only `app/src/main/AndroidManifest.xml`
-  was staged; a pre-existing unrelated `M AGENTS.md` working-tree change was left untouched.
+This comes from the brief's verbatim `header()` code (`pi.versionCode` — deprecated since API 28 in favor of `longVersionCode`). Kept verbatim as required; harmless.
 
-## Files Changed
+## Files changed
 
-- `D:\Smart-Edge\app\src\main\AndroidManifest.xml` (committed)
-- `D:\Smart-Edge\local.properties` (created, gitignored — build-environment fix, see below)
+- `app/src/main/java/com/imi/smartedge/sidebar/panel/PanelPreferences.kt` (+6 lines)
+- `app/src/main/java/com/imi/smartedge/sidebar/panel/DebugLog.kt` (new, 135 lines)
 
-## Environment Issues Encountered and Fixed (not caused by the manifest change)
+Commit: `ad4891a` — `feat(log): add rotating file logger (DebugLog) and preference` (2 files changed, 141 insertions(+), 0 deletions)
 
-Three machine-level problems blocked the build before verification could succeed:
+## Self-review findings
 
-1. **User init-script conflict (will recur).** `C:\Users\jiangyunfei\.gradle\init.d\mirrors.gradle`
-   injects Maven repositories via `allprojects { repositories { ... } }`, which aborts any
-   build of this project because `settings.gradle.kts` sets
-   `RepositoriesMode.FAIL_ON_PROJECT_REPOS`:
-   `repository 'Google' was added by initialization script`.
-   Workaround used: temporarily moved the init script to `/tmp`, built, restored it
-   afterwards (verified restored). **Task 2-4 implementers will hit this on every
-   `./gradlew` invocation** until the init script is rewritten to hook
-   `settingsEvaluated { it.dependencyResolutionManagement.repositories { ... } }` instead of
-   `allprojects`, or is moved aside.
-2. **Missing SDK location.** No `local.properties` and no `ANDROID_HOME`. Found a full SDK
-   at `C:\Android` and created gitignored `local.properties` with `sdk.dir=C\:\\Android`.
-3. **Missing platform android-34.** The SDK only had android-35/36. AGP auto-downloaded and
-   installed `platforms/android-34` (revision 3) into `C:\Android` on the first build
-   attempt (license already accepted); the build succeeded on the second run. This is
-   persisted, so later tasks won't re-download.
+- All "Produces" interfaces exist with exact names/signatures: `DebugLog.i/e/session/shutdown/readAll`, `PanelPreferences.debugLogEnabled` (default `false`). Confirmed against the committed diff.
+- `DebugLog.kt` is byte-identical to the brief's code block (checked with `diff`).
+- Nothing extra added, no unrelated edits. The only other working-tree change, `.superpowers/sdd/task-1-brief.md`, was already modified before this task started and was left untouched/uncommitted.
+- Codebase conventions respected: flat package, `PanelPreferences` accessor style matches neighboring properties (`prefs.edit { ... }` KTX pattern already imported in that file).
+- Note: this file previously held a Task 1 report from an earlier plan (manifest dual-launcher-aliases); overwritten as instructed.
 
-## Self-Review Findings
+## Issues or concerns
 
-- Diffed the commit against the brief's XML blocks character-for-character: both alias
-  blocks, comments, attribute names/values/order, and the `stopWithTask` insertion match
-  the brief verbatim.
-- Nothing extra was added or removed; no other manifest elements were touched.
-- Alias component names are exactly `LauncherHidden` / `LauncherVisible` as later tasks
-  require.
-- Commit message and staged file set match the brief's Step 4 exactly.
+- None blocking. Minor note for later tasks: the `versionCode` deprecation warning above could be silenced with `@Suppress("DEPRECATION")` or `longVersionCode`, but the brief mandates verbatim code so it was left as-is.
 
-## Concerns
+## Fix 1 (review F1-F3)
 
-- The `mirrors.gradle` init-script conflict (item 1 above) is a recurring environment
-  hazard for subsequent tasks on this machine; flagged so the coordinator can include the
-  workaround in Task 2-4 briefs or have the init script fixed permanently.
-- Otherwise none: no code changes were needed, and the manifest merger accepted the
-  aliases without warnings.
+Applied on `feat/ime-fix-debug-log` to `app/src/main/java/com/imi/smartedge/sidebar/panel/DebugLog.kt`:
+
+- **F1 (Important) + F2 (Minor) — `enqueue()` rewritten** with the reviewer's exact code: caller-thread timestamp capture (`System.currentTimeMillis()` → `at`) and caller-thread-id capture (`tid`) now happen before the post; `lineTs.format(Date(at))` runs inside the posted lambda, confining the non-thread-safe `SimpleDateFormat` to the DebugLog HandlerThread, and logged `T<id>` now attributes the real calling thread instead of the log thread.
+- **F3 (Minor) — `header()` versionCode**: replaced `${pi.versionCode}` with the reviewer's SDK-28-guarded expression (`pi.longVersionCode` on API >= 28, `pi.versionCode.toLong()` below). Note: the guarded fallback branch still references the deprecated field, so the `w: 'versionCode: Int' is deprecated` warning persisted after the replacement alone. Added `@Suppress("DEPRECATION")` (with a guard-explaining comment) on `header()` to actually eliminate the warning — the reviewer's stated goal — without changing behavior.
+
+Verification: `./gradlew assembleDebug --console=plain` (mirrors.gradle move-aside workaround applied and restored):
+
+```
+BUILD SUCCESSFUL in 2s
+```
+
+No `w:` deprecation warnings emitted — the previous `DebugLog.kt:88 'versionCode: Int' is deprecated` warning is gone.
+
+Commit: `defb2e6` — `fix(log): confine date formatting to log thread and attribute caller thread` (1 file changed, 5 insertions(+), 3 deletions(-); only DebugLog.kt staged).

@@ -1,105 +1,138 @@
-### Task 3: Settings UI — toggle in Miscellaneous settings
+### Task 3: FloatingPanelService instrumentation + session restore
 
 **Files:**
-- Modify: `app/src/main/res/values/strings.xml` (after line 149)
-- Modify: `app/src/main/res/values-es/strings.xml` (after line 150)
-- Modify: `app/src/main/res/values-zh/strings.xml` (after line 150)
-- Modify: `app/src/main/res/layout/activity_settings_misc.xml` (after the `misc_hide_notification_desc` TextView)
-- Modify: `app/src/main/java/com/imi/smartedge/sidebar/panel/MiscellaneousSettingsActivity.kt` (after the `featureHideNotification` listener block, lines 58–65)
+- Modify: `app/src/main/java/com/imi/smartedge/sidebar/panel/FloatingPanelService.kt` (onCreate ~line 161, onDestroy, onStartCommand, ACTION_REFRESH branch ~line 259, `isCurrentPackageLauncher` ~line 502, `addEdgeHandle` gate ~line 568)
 
 **Interfaces:**
-- Consumes: `PanelPreferences.hideFromRecents` (Task 2), `RecentsHideHelper.apply(context, hidden)` (Task 2), ViewBinding id `feature_hide_recents` → `binding.featureHideRecents`.
-- Produces: nothing consumed later.
+- Consumes: `DebugLog.i/session` (Task 1).
+- Produces: `isCurrentPackageLauncher(): Boolean` unchanged signature (now logs its match branch).
 
-- [ ] **Step 1: Add strings in all three locales**
+- [ ] **Step 1: Session restore + lifecycle logs**
 
-`values/strings.xml` (after `misc_hide_notification_desc`):
-
-```xml
-    <string name="misc_hide_recents_label">Hide from Recents</string>
-    <string name="misc_hide_recents_desc">Keeps the panel alive by hiding this app from Recents; takes effect on next launch. The home-screen icon may briefly refresh when toggled</string>
-```
-
-`values-zh/strings.xml`:
-
-```xml
-    <string name="misc_hide_recents_label">从最近任务隐藏</string>
-    <string name="misc_hide_recents_desc">将应用从最近任务中隐藏,防止清理后台时误杀侧边栏;对新启动生效。切换开关时桌面图标可能短暂刷新,属正常现象</string>
-```
-
-`values-es/strings.xml`:
-
-```xml
-    <string name="misc_hide_recents_label">Ocultar de apps recientes</string>
-    <string name="misc_hide_recents_desc">Oculta la app de las apps recientes para evitar que el panel se cierre al limpiar la memoria; surte efecto en el próximo inicio. El icono puede actualizarse brevemente al cambiarlo</string>
-```
-
-- [ ] **Step 2: Add the switch to the layout**
-
-In `activity_settings_misc.xml`, inside the same card as `feature_hide_notification`, directly after the `misc_hide_notification_desc` TextView:
-
-```xml
-                    <!-- Hide from Recents -->
-                    <com.google.android.material.materialswitch.MaterialSwitch
-                        android:id="@+id/feature_hide_recents"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/misc_hide_recents_label"
-                        android:textColor="?attr/colorOnSurface"
-                        android:textSize="16sp"
-                        android:paddingVertical="12dp" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/misc_hide_recents_desc"
-                        android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="14sp"
-                        android:layout_marginBottom="8dp" />
-```
-
-(Structure and attributes mirror the neighboring `feature_hide_notification` block exactly.)
-
-- [ ] **Step 3: Wire up the activity**
-
-In `MiscellaneousSettingsActivity.onCreate()`, after the existing `featureHideNotification` listener block (lines 58–65), add:
+In `onCreate`, immediately after `applyNotificationVisibility()` (line ~161):
 
 ```kotlin
-        val hideRecentsListener = android.widget.CompoundButton.OnCheckedChangeListener { _, isChecked ->
-            val previous = panelPrefs.hideFromRecents
-            try {
-                RecentsHideHelper.apply(this, isChecked)
-                panelPrefs.hideFromRecents = isChecked
-            } catch (e: Exception) {
-                // Roll the preference and the switch back on ROMs where component
-                // switching fails; re-checking fires the listener again, so detach it first.
-                panelPrefs.hideFromRecents = previous
-                binding.featureHideRecents.setOnCheckedChangeListener(null)
-                binding.featureHideRecents.isChecked = previous
-                binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
-                binding.root.showModernToast("Couldn't change Recents visibility: ${e.message}")
-            }
-        }
-        binding.featureHideRecents.isChecked = panelPrefs.hideFromRecents
-        binding.featureHideRecents.setOnCheckedChangeListener(hideRecentsListener)
+        applyNotificationVisibility()
+
+        // Resume file logging after process restarts when the preference is on
+        DebugLog.session(this)
+        DebugLog.i(TAG, "service onCreate")
 ```
 
-Note the listener is attached **after** the initial `isChecked` assignment so the programmatic set does not trigger it.
+Locate `onDestroy()` (`grep -n "onDestroy" FloatingPanelService.kt`) and add as its first line:
 
-- [ ] **Step 4: Build and lint to verify**
+```kotlin
+        DebugLog.i(TAG, "service onDestroy")
+```
 
-Run: `./gradlew assembleDebug lint`
-Expected: `BUILD SUCCESSFUL` for both. Lint failures about missing translations or unused resources must be fixed before committing (`abortOnError = true`).
+- [ ] **Step 2: Log service actions**
 
-- [ ] **Step 5: Commit**
+Locate `override fun onStartCommand` and add as its first line:
+
+```kotlin
+        DebugLog.i(TAG, "action=${intent?.action}")
+```
+
+- [ ] **Step 3: isCurrentPackageLauncher match-branch logging**
+
+Replace the body of `isCurrentPackageLauncher()` (keep the function signature and the FallbackHome comment) with:
+
+```kotlin
+    private fun isCurrentPackageLauncher(): Boolean {
+        val currentPkg = panelPrefs.currentForegroundPackage
+        if (currentPkg.isEmpty() || currentPkg == packageName) {
+            DebugLog.i(TAG, "isLauncher=true by=${if (currentPkg.isEmpty()) "empty" else "own"}")
+            return true // Assume home if unknown or if in our own app
+        }
+
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+        }
+        val resolveInfo = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        val homePkg = resolveInfo?.activityInfo?.packageName
+
+        // Also check all installed launchers as some devices have multiple or third-party ones.
+        // FallbackHome (a provisioning stub inside the Settings package) must be excluded,
+        // otherwise opening the Settings app is misdetected as "on the home screen".
+        val allLaunchers = packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            .filter { it.activityInfo.name != "com.android.settings.FallbackHome" }
+            .map { it.activityInfo.packageName }
+
+        val by = when {
+            currentPkg == homePkg -> "default"
+            allLaunchers.contains(currentPkg) -> "anyLauncher"
+            currentPkg == "com.android.systemui" -> "systemui"
+            else -> "none"
+        }
+        DebugLog.i(TAG, "isLauncher=${by != "none"} by=$by fg=$currentPkg")
+        return by != "none"
+    }
+```
+
+- [ ] **Step 4: Gate snapshot in addEdgeHandle**
+
+In `addEdgeHandle` (~line 568), replace:
+
+```kotlin
+        if (!anyTriggerEnabled || (panelPrefs.onlyOnHome && !isCurrentPackageLauncher()) || !hasActiveEngine || isImeVisible) {
+            removeView(edgeHandleView)
+            edgeHandleView = null
+            return
+        }
+```
+
+with:
+
+```kotlin
+        val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()
+        DebugLog.i(
+            TAG,
+            "handle gates: triggers=$anyTriggerEnabled isLauncher=$isLauncher " +
+                "engine=$hasActiveEngine imeVis=$isImeVisible fg=${panelPrefs.currentForegroundPackage} => " +
+                if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible) "HIDE" else "SHOW"
+        )
+        if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible) {
+            removeView(edgeHandleView)
+            edgeHandleView = null
+            return
+        }
+```
+
+- [ ] **Step 5: Gate snapshot in the ACTION_REFRESH branch**
+
+In the ACTION_REFRESH handling (~line 259), replace:
+
+```kotlin
+                    val shouldShowHandle = if (isLandscape && !panelPrefs.showInLandscape) false
+                                          else if (panelPrefs.onlyOnHome && !isCurrentPackageLauncher()) false
+                                          else true
+```
+
+with:
+
+```kotlin
+                    val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()
+                    val shouldShowHandle = if (isLandscape && !panelPrefs.showInLandscape) false
+                                          else if (!isLauncher) false
+                                          else true
+                    DebugLog.i(
+                        TAG,
+                        "refresh handle=$shouldShowHandle landscape=$isLandscape " +
+                            "onlyOnHome=${panelPrefs.onlyOnHome} isLauncher=$isLauncher " +
+                            "imeVis=$isImeVisible fg=${panelPrefs.currentForegroundPackage}"
+                    )
+```
+
+- [ ] **Step 6: Build to verify**
+
+Run: `./gradlew assembleDebug`
+Expected: `BUILD SUCCESSFUL`.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add app/src/main/res/values/strings.xml \
-        app/src/main/res/values-es/strings.xml \
-        app/src/main/res/values-zh/strings.xml \
-        app/src/main/res/layout/activity_settings_misc.xml \
-        app/src/main/java/com/imi/smartedge/sidebar/panel/MiscellaneousSettingsActivity.kt
-git commit -m "feat(recents): add hide-from-Recents toggle in misc settings"
+git add app/src/main/java/com/imi/smartedge/sidebar/panel/FloatingPanelService.kt
+git commit -m "feat(log): instrument handle show/hide gates and service lifecycle"
 ```
 
 ---
