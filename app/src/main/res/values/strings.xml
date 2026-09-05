@@ -149,6 +149,10 @@
     <string name="misc_hide_notification_desc">Run the panel service without a persistent notification; keep-alive then relies on the Accessibility service</string>
     <string name="misc_hide_recents_label">Hide from Recents</string>
     <string name="misc_hide_recents_desc">Keeps the panel alive by hiding this app from Recents. Changing this setting closes the app; the home-screen icon may also refresh briefly</string>
+    <string name="misc_debug_log_label">Debug Logging</string>
+    <string name="misc_debug_log_desc">Records detailed diagnostic logs on this device to help diagnose rare issues; use Export Logs to share them. Logs stay on your device until you export</string>
+    <string name="misc_export_log_title">Export Logs</string>
+    <string name="misc_export_log_desc">Save the debug log as a .txt file in Downloads/SidePanel</string>
     <string name="misc_section_backup">Backup &amp; Restore</string>
     <string name="misc_export_title">Export Settings</string>
     <string name="misc_export_desc">Save setup to internal storage</string>

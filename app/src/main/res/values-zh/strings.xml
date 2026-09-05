@@ -150,6 +150,10 @@
     <string name="misc_hide_notification_desc">面板服务不以常驻通知运行,保活依赖无障碍服务(系统深度清理后需重新打开应用)</string>
     <string name="misc_hide_recents_label">从最近任务隐藏</string>
     <string name="misc_hide_recents_desc">将应用从最近任务中隐藏,防止清理后台时误杀侧边栏。更改此设置会关闭应用,桌面图标也可能短暂刷新,属正常现象</string>
+    <string name="misc_debug_log_label">调试日志</string>
+    <string name="misc_debug_log_desc">在本机记录详细诊断日志,用于排查偶发问题;可通过导出日志分享分析。日志仅保存在本机,导出由你主动触发</string>
+    <string name="misc_export_log_title">导出日志</string>
+    <string name="misc_export_log_desc">将调试日志保存为 txt 文件到 Downloads/SidePanel</string>
     <string name="misc_section_backup">备份与恢复</string>
     <string name="misc_export_title">导出设置</string>
     <string name="misc_export_desc">将配置保存到内部存储</string>

@@ -150,6 +150,10 @@
     <string name="misc_hide_notification_desc">Ejecuta el servicio sin notificación persistente; la permanencia depende del servicio de accesibilidad</string>
     <string name="misc_hide_recents_label">Ocultar de apps recientes</string>
     <string name="misc_hide_recents_desc">Oculta la app de las apps recientes para evitar que el panel se cierre al limpiar la memoria. Cambiar este ajuste cierra la app; el icono puede actualizarse brevemente</string>
+    <string name="misc_debug_log_label">Registro de depuración</string>
+    <string name="misc_debug_log_desc">Guarda registros de diagnóstico detallados en el dispositivo para diagnosticar problemas poco frecuentes; usa Exportar para compartirlos. Los registros permanecen en tu dispositivo hasta que los exportes</string>
+    <string name="misc_export_log_title">Exportar registros</string>
+    <string name="misc_export_log_desc">Guarda el registro de depuración como .txt en Descargas/SidePanel</string>
     <string name="misc_section_backup">Copia de Seguridad</string>
     <string name="misc_export_title">Exportar Ajustes</string>
     <string name="misc_export_desc">Guardar configuración en el almacenamiento</string>
