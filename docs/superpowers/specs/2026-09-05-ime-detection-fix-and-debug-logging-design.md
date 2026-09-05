@@ -106,3 +106,8 @@ object DebugLog {
 4. `PanelPreferences.kt` — `debugLogEnabled`。
 5. `MiscellaneousSettingsActivity.kt` + 布局 — 开关 + 导出按钮。
 6. `values*/strings.xml` ×3 — 文案。
+
+## 附录：实现期发现（2026-09-05，模拟器验收后）
+
+1. **输入法包名集合改由 IMM 公开 API 获取（SecurityException）**：`Settings.Secure.ENABLED_INPUT_METHODS` 仅对 targetSdk ≤33 的应用可读；API 35 模拟器实测（SDK 34+ 目标）读取即抛 `SecurityException`，令 a11y 服务在每次 TYPE_WINDOW_STATE_CHANGED 上崩溃循环。实际实现改由公开 API `InputMethodManager.enabledInputMethodList` 取包名集合（`runCatching` 包裹、30 秒缓存不变），修复见 commit a7d2c9d。正文中「解析 `Settings.Secure.ENABLED_INPUT_METHODS`」的表述（「背景与问题」末条与「IME 检测修复」第 1 条）以本附录为准。
+2. **埋点 #3 日志位置调整**：原计划在每个 launcher content-changed 事件上记录 `throttled` 状态；终稿改为仅在通过 800ms 节流、真正发出 refresh 时记录 `refreshSent=true`——MagicOS 等 OEM 桌面该事件频率极高，逐条记录会迅速轮转掉 2MB 日志。
