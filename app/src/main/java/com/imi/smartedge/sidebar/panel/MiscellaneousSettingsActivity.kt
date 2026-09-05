@@ -170,6 +170,7 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
                 "Downloads/$folderName/$fileName"
             }
         } catch (e: Exception) {
+            android.util.Log.w("MiscSettings", "saveToDownloads failed: $fileName", e)
             null
         }
     }
@@ -180,6 +181,7 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val saved = saveToDownloads("smartedge_backup_$timestamp.json", "application/json", json)
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 if (saved != null) binding.root.showModernToast("Saved to $saved")
                 else binding.root.showModernToast("Export failed – could not create file")
             }
@@ -191,6 +193,7 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
             val content = DebugLog.readAll(this)
             if (content == null) {
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     binding.root.showModernToast("No logs yet - turn on Debug Logging first")
                 }
                 return@Thread
@@ -198,6 +201,7 @@ class MiscellaneousSettingsActivity : AppCompatActivity() {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val saved = saveToDownloads("smartedge_log_$timestamp.txt", "text/plain", content)
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 if (saved != null) binding.root.showModernToast("Saved to $saved")
                 else binding.root.showModernToast("Export failed – could not create file")
             }
