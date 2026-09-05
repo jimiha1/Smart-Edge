@@ -159,6 +159,10 @@ class FloatingPanelService : Service() {
         }
         applyNotificationVisibility()
 
+        // Resume file logging after process restarts when the preference is on
+        DebugLog.session(this)
+        DebugLog.i(TAG, "service onCreate")
+
         initSidePanel()
         initPickerPanel()
         
@@ -205,6 +209,7 @@ class FloatingPanelService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        DebugLog.i(TAG, "action=${intent?.action}")
         val action = intent?.action
         
         // If service is disabled, we only allow ACTION_TOGGLE or ACTION_STOP to proceed.
@@ -257,9 +262,16 @@ class FloatingPanelService : Service() {
                         panelPrefs.setPanelApps(topApps)
                     }
                     val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+                    val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()
                     val shouldShowHandle = if (isLandscape && !panelPrefs.showInLandscape) false
-                                          else if (panelPrefs.onlyOnHome && !isCurrentPackageLauncher()) false
+                                          else if (!isLauncher) false
                                           else true
+                    DebugLog.i(
+                        TAG,
+                        "refresh handle=$shouldShowHandle landscape=$isLandscape " +
+                            "onlyOnHome=${panelPrefs.onlyOnHome} isLauncher=$isLauncher " +
+                            "imeVis=$isImeVisible fg=${panelPrefs.currentForegroundPackage}"
+                    )
 
                     if (!shouldShowHandle) {
                         edgeHandleView?.visibility = View.GONE
@@ -437,6 +449,7 @@ class FloatingPanelService : Service() {
     }
 
     override fun onDestroy() {
+        DebugLog.i(TAG, "service onDestroy")
         super.onDestroy()
         isRunning = false
         try {
@@ -496,22 +509,32 @@ class FloatingPanelService : Service() {
 
     private fun isCurrentPackageLauncher(): Boolean {
         val currentPkg = panelPrefs.currentForegroundPackage
-        if (currentPkg.isEmpty() || currentPkg == packageName) return true // Assume home if unknown or if in our own app
+        if (currentPkg.isEmpty() || currentPkg == packageName) {
+            DebugLog.i(TAG, "isLauncher=true by=${if (currentPkg.isEmpty()) "empty" else "own"}")
+            return true // Assume home if unknown or if in our own app
+        }
 
         val intent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
         }
         val resolveInfo = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
         val homePkg = resolveInfo?.activityInfo?.packageName
-        
+
         // Also check all installed launchers as some devices have multiple or third-party ones.
         // FallbackHome (a provisioning stub inside the Settings package) must be excluded,
         // otherwise opening the Settings app is misdetected as "on the home screen".
         val allLaunchers = packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
             .filter { it.activityInfo.name != "com.android.settings.FallbackHome" }
             .map { it.activityInfo.packageName }
-        
-        return currentPkg == homePkg || allLaunchers.contains(currentPkg) || currentPkg == "com.android.systemui"
+
+        val by = when {
+            currentPkg == homePkg -> "default"
+            allLaunchers.contains(currentPkg) -> "anyLauncher"
+            currentPkg == "com.android.systemui" -> "systemui"
+            else -> "none"
+        }
+        DebugLog.i(TAG, "isLauncher=${by != "none"} by=$by fg=$currentPkg")
+        return by != "none"
     }
 
     private fun addNotchHandle() {
@@ -563,7 +586,14 @@ class FloatingPanelService : Service() {
         // If neither Accessibility is ON nor Native Automation is POSSIBLE, we must NOT show the handle.
         val hasActiveEngine = isAccessibilityServiceEnabled() || (panelPrefs.useAutomationForGestures && AutomationManager.isAutomationPossible())
 
-        if (!anyTriggerEnabled || (panelPrefs.onlyOnHome && !isCurrentPackageLauncher()) || !hasActiveEngine || isImeVisible) {
+        val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()
+        DebugLog.i(
+            TAG,
+            "handle gates: triggers=$anyTriggerEnabled isLauncher=$isLauncher " +
+                "engine=$hasActiveEngine imeVis=$isImeVisible fg=${panelPrefs.currentForegroundPackage} => " +
+                if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible) "HIDE" else "SHOW"
+        )
+        if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible) {
             removeView(edgeHandleView)
             edgeHandleView = null
             return
