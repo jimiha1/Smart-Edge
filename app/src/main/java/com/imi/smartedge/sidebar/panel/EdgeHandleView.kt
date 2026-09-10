@@ -20,7 +20,7 @@ import android.view.Gravity
 class EdgeHandleView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
-) : View(context, attrs) {
+) : android.widget.FrameLayout(context, attrs) {
 
     var onTrigger: (() -> Unit)? = null
     var onAdjustBrightness: ((delta: Int) -> Unit)? = null
@@ -70,6 +70,17 @@ class EdgeHandleView @JvmOverloads constructor(
     private val triggerThreshold = 16 * density
     private val holdDurationMs = 250L
 
+    // Inner pill visual; the window itself is the (taller) unified touch zone
+    private val pillView = View(context)
+
+    /** Top offset of the pill visual inside this touch-zone window, px */
+    var pillTopInWindow: Int = 0
+        set(value) {
+            if (field == value) return
+            field = value
+            requestLayout()
+        }
+
     // ── Drag-to-reposition state ──────────────────────────────────────────────
     private var isDragMode = false
     private var dragStartRawY = 0f
@@ -86,7 +97,7 @@ class EdgeHandleView @JvmOverloads constructor(
             // If we didn't enter drag mode, vibrate and reset scale
             if (!isDragMode) {
                 vibrateHaptic(40)
-                animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+                pillView.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
             }
         }
     }
@@ -97,7 +108,7 @@ class EdgeHandleView @JvmOverloads constructor(
         vibrateHaptic()
         onTrigger?.invoke()
         if (showPill) {
-            animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+            pillView.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
         }
     }
 
@@ -115,13 +126,12 @@ class EdgeHandleView @JvmOverloads constructor(
 
     private val resetAlphaRunnable = Runnable {
         isTempHighAlpha = false
-        alpha = panelPrefs.panelOpacity / 100f
-        updatePill()
+        pillView.alpha = panelPrefs.panelOpacity / 100f
     }
 
     fun showTemporarily() {
         isTempHighAlpha = true
-        alpha = 1.0f
+        pillView.alpha = 1.0f
         handler.removeCallbacks(resetAlphaRunnable)
         handler.postDelayed(resetAlphaRunnable, 3000)
     }
@@ -148,7 +158,7 @@ class EdgeHandleView @JvmOverloads constructor(
         }
 
         // Grow the pill slightly to signal drag mode
-        animate().scaleX(1.2f).scaleY(1.2f).setDuration(150).start()
+        pillView.animate().scaleX(1.2f).scaleY(1.2f).setDuration(150).start()
     }
 
     private fun triggerPanel() {
@@ -172,63 +182,13 @@ class EdgeHandleView @JvmOverloads constructor(
     }
 
     init {
+        clipChildren = false
         setLayerType(LAYER_TYPE_HARDWARE, null)
-        setWillNotDraw(false)
-        post { 
-            updatePill()
-            setupImeListener()
-        }
-    }
-
-    private fun setupImeListener() {
-        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
-            if (isDragMode) return@setOnApplyWindowInsetsListener insets
-            
-            val imeVisible = insets.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())
-            val imeHeight = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom
-            
-            val params = layoutParams as? WindowManager.LayoutParams
-            if (params != null) {
-                val screenHeight = resources.displayMetrics.heightPixels
-                if (imeVisible && imeHeight > 0) {
-                    val keyboardTop = screenHeight - imeHeight
-                    val h = height
-                    val handleCenterAbsY = (screenHeight / 2) + params.y
-                    val handleBottomAbsY = handleCenterAbsY + (h / 2)
-
-                    if (handleBottomAbsY > keyboardTop) {
-                        val overlap = handleBottomAbsY - keyboardTop
-                        val margin = (32 * density).toInt()
-                        val newY = params.y - overlap - margin
-                        
-                        val animator = android.animation.ValueAnimator.ofInt(params.y, newY.toInt())
-                        animator.duration = 200
-                        animator.addUpdateListener { animation ->
-                            params.y = animation.animatedValue as Int
-                            updateLayoutSafely(params)
-                        }
-                        animator.start()
-                    }
-                } else {
-                    val h = if (showPill) (panelPrefs.handleHeight * density).toInt()
-                            else (panelPrefs.handleHeight * 1.5f * density).toInt()
-                    val safeMargin = (10 * density).toInt()
-                    val maxOffset = (screenHeight / 2) - (h / 2) - safeMargin
-                    val targetY = (panelPrefs.handleVerticalOffset * density).toInt().coerceIn(-maxOffset, maxOffset)
-                    
-                    if (params.y != targetY) {
-                        val animator = android.animation.ValueAnimator.ofInt(params.y, targetY)
-                        animator.duration = 200
-                        animator.addUpdateListener { animation ->
-                            params.y = animation.animatedValue as Int
-                            updateLayoutSafely(params)
-                        }
-                        animator.start()
-                    }
-                }
-            }
-            insets
-        }
+        addView(pillView, android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        ))
+        post { updatePill() }
     }
 
     private fun updateLayoutSafely(params: WindowManager.LayoutParams) {
@@ -253,7 +213,7 @@ class EdgeHandleView @JvmOverloads constructor(
     fun updatePill() {
         val currentPkg = panelPrefs.currentForegroundPackage
         val hidePillInCurrentApp = panelPrefs.autoHideInFullscreen && panelPrefs.isWhitelistedFromAutoHide(currentPkg)
-        
+
         // Build a unique key for the current visual state to prevent redundant updates
         val stateKey = "${isRightSide}_${showPill}_${hidePillInCurrentApp}_${panelPrefs.pillColor}_${panelPrefs.handleWidth}_${panelPrefs.pillWidth}_${panelPrefs.panelOpacity}_${isImmersiveMode}"
         if (stateKey == lastPillState) return
@@ -268,42 +228,27 @@ class EdgeHandleView @JvmOverloads constructor(
                 } else {
                     cornerRadii = floatArrayOf(0f, 0f, cornerRadius, cornerRadius, cornerRadius, cornerRadius, 0f, 0f)
                 }
-                
+
                 try {
                     val color = Color.parseColor(panelPrefs.pillColor)
                     setColor(color)
                 } catch (e: Exception) {
                     setColor(Color.WHITE)
                 }
-                
+
                 setStroke((1 * density).toInt(), Color.parseColor("#4DFFFFFF"))
             }
-
-            val triggerWidthDp = panelPrefs.handleWidth
-            val pillWidthDp = panelPrefs.pillWidth
-            val insetDp = (triggerWidthDp - pillWidthDp).coerceAtLeast(0)
-            val insetPx = (insetDp * density).toInt()
-
-            val newInset = if (isRightSide) {
-                android.graphics.drawable.InsetDrawable(shape, insetPx, 0, 0, 0)
-            } else {
-                android.graphics.drawable.InsetDrawable(shape, 0, 0, insetPx, 0)
-            }
-            background = newInset
-            
+            pillView.background = shape
+            pillView.visibility = View.VISIBLE
             if (!isTempHighAlpha) {
-                alpha = panelPrefs.panelOpacity / 100f
-            }
-            
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                post { systemGestureExclusionRects = listOf(Rect(0, 0, width, height)) }
+                pillView.alpha = panelPrefs.panelOpacity / 100f
             }
         } else {
-            background = null
-            alpha = 0f
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                systemGestureExclusionRects = listOf(Rect(0, 0, width, height))
-            }
+            pillView.background = null
+            pillView.visibility = View.INVISIBLE
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            post { systemGestureExclusionRects = listOf(Rect(0, 0, width, height)) }
         }
         invalidate()
     }
@@ -337,7 +282,7 @@ class EdgeHandleView @JvmOverloads constructor(
                 handler.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout().toLong())
 
                 if (showPill && panelPrefs.gesturesEnabled) {
-                    animate().scaleX(0.85f).scaleY(0.95f).setDuration(100).start()
+                    pillView.animate().scaleX(0.85f).scaleY(0.95f).setDuration(100).start()
                 }
 
                 // Record current window Y for drag baseline (fallback)
@@ -478,7 +423,7 @@ class EdgeHandleView @JvmOverloads constructor(
                     
                     handler.postDelayed(holdRunnable, effectiveHoldTime)
                     if (showPill) {
-                        animate().scaleX(0.7f).scaleY(0.9f).setDuration(effectiveHoldTime).start()
+                        pillView.animate().scaleX(0.7f).scaleY(0.9f).setDuration(effectiveHoldTime).start()
                     }
                 }
 
@@ -486,7 +431,7 @@ class EdgeHandleView @JvmOverloads constructor(
                     hasPassedThreshold = false
                     handler.removeCallbacks(holdRunnable)
                     if (showPill) {
-                        animate().scaleX(0.85f).scaleY(0.95f).setDuration(80).start()
+                        pillView.animate().scaleX(0.85f).scaleY(0.95f).setDuration(80).start()
                     }
                 }
                 return true
@@ -499,12 +444,12 @@ class EdgeHandleView @JvmOverloads constructor(
                 if (isDragMode) {
                     saveFinalPosition()
                     isDragMode = false
-                    animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+                    pillView.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
                     return true
                 }
 
                 if (showPill && !isTriggered && panelPrefs.gesturesEnabled) {
-                    animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+                    pillView.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
                 }
 
                 if (hasPassedThreshold && !isTriggered) {
@@ -553,8 +498,10 @@ class EdgeHandleView @JvmOverloads constructor(
 
     private fun saveFinalPosition() {
         val params = layoutParams as? WindowManager.LayoutParams ?: return
-        val offsetDp = (params.y / density).toInt()
-        panelPrefs.handleVerticalOffset = offsetDp
+        // Pill center = window center offset + pill offset inside the window
+        val pillCenterInWindow = pillTopInWindow + pillView.height / 2f
+        val pillCenterOffset = params.y + pillCenterInWindow - height / 2f
+        panelPrefs.handleVerticalOffset = (pillCenterOffset / density).toInt()
 
         val newSide = if (isRightSide) PanelPreferences.SIDE_RIGHT else PanelPreferences.SIDE_LEFT
         if (panelPrefs.panelSide != newSide) {
@@ -576,37 +523,13 @@ class EdgeHandleView @JvmOverloads constructor(
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
+        val pillW = (panelPrefs.pillWidth * density).toInt()
+        val pillH = (panelPrefs.handleHeight * density).toInt()
+        val pl = if (isRightSide) width - pillW else 0
+        pillView.layout(pl, pillTopInWindow, pl + pillW, pillTopInWindow + pillH)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             systemGestureExclusionRects = listOf(Rect(0, 0, width, height))
         }
     }
 
-    fun updateFromPrefs() {
-        val prefs = PanelPreferences(context)
-        isRightSide = prefs.panelSide == PanelPreferences.SIDE_RIGHT
-        showPill = prefs.showPill
-        
-        if (!isTempHighAlpha) {
-            alpha = prefs.panelOpacity / 100f
-        }
-
-        val params = layoutParams as? WindowManager.LayoutParams
-        if (params != null) {
-            val screenH = resources.displayMetrics.heightPixels
-            val safeMargin = (10 * density).toInt()
-
-            val h = if (showPill) (prefs.handleHeight * density).toInt()
-                    else (prefs.handleHeight * 1.5f * density).toInt()
-
-            val maxOffset = (screenH / 2) - (h / 2) - safeMargin
-            val requestedOffset = (prefs.handleVerticalOffset * density).toInt()
-
-            params.y = requestedOffset.coerceIn(-maxOffset, maxOffset)
-            params.width = (prefs.handleWidth * density).toInt()
-            params.height = h
-
-            updateLayoutSafely(params)
-        }
-        updatePill()
-    }
 }

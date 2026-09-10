@@ -614,14 +614,19 @@ class FloatingPanelService : Service() {
                 val density = resources.displayMetrics.density
                 val screenH = resources.displayMetrics.heightPixels
                 val safeMargin = (10 * density).toInt()
-                val h = if (isPillVisible) (panelPrefs.handleHeight * density).toInt()
-                        else (screenH * 0.60f).toInt()
-                val maxOffset = (screenH / 2) - (h / 2) - safeMargin
-                val requestedOffset = (panelPrefs.handleVerticalOffset * density).toInt()
+                // Unified touch zone regardless of pill visibility; the pill is
+                // positioned inside the window so its placement range is preserved.
+                val pillH = (panelPrefs.handleHeight * density).toInt()
+                val zoneH = maxOf(pillH, (screenH * 0.60f).toInt())
+                val pillMax = (screenH / 2) - (pillH / 2) - safeMargin
+                val winMax = (screenH / 2) - (zoneH / 2)
+                val requestedOffset = (panelPrefs.handleVerticalOffset * density).toInt().coerceIn(-pillMax, pillMax)
+                val winY = requestedOffset.coerceIn(-winMax, winMax)
 
                 params.width = (panelPrefs.handleWidth * density).toInt()
-                params.height = h
-                params.y = requestedOffset.coerceIn(-maxOffset, maxOffset)
+                params.height = zoneH
+                params.y = winY
+                edgeHandleView?.pillTopInWindow = requestedOffset - winY + (zoneH - pillH) / 2
                 
                 try {
                     windowManager.updateViewLayout(edgeHandleView, params)
@@ -663,13 +668,19 @@ class FloatingPanelService : Service() {
         }
 
         val handleWidth = panelPrefs.handleWidth // Use user-defined width
-        val handleHeight = if (isPillVisible) dpToPx(panelPrefs.handleHeight) 
-                           else dpToPx((panelPrefs.handleHeight * 1.5f).toInt())
+        // Unified touch zone regardless of pill visibility; pill is positioned inside
+        val screenH = resources.displayMetrics.heightPixels
+        val pillH = dpToPx(panelPrefs.handleHeight)
+        val zoneH = maxOf(pillH, (screenH * 0.60f).toInt())
+        val safeMargin = dpToPx(10)
+        val pillMax = (screenH / 2) - (pillH / 2) - safeMargin
+        val winMax = (screenH / 2) - (zoneH / 2)
+        val requestedOffset = dpToPx(panelPrefs.handleVerticalOffset).coerceIn(-pillMax, pillMax)
+        val winY = requestedOffset.coerceIn(-winMax, winMax)
 
-        // Fix: Use FLAG_LAYOUT_NO_LIMITS carefully or ensure GRAVITY_CENTER doesn't overflow
         val params = WindowManager.LayoutParams(
             dpToPx(handleWidth),
-            handleHeight,
+            zoneH,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
@@ -679,18 +690,10 @@ class FloatingPanelService : Service() {
         ).apply {
             gravity = if (isRight) Gravity.END or Gravity.CENTER_VERTICAL
                       else Gravity.START or Gravity.CENTER_VERTICAL
-            
-            // Calculate absolute max offset to keep handle on screen
-            val screenH = resources.displayMetrics.heightPixels
-            val safeMargin = dpToPx(10) // Keep away from extreme top/bottom edges
-            val maxOffset = (screenH / 2) - (handleHeight / 2) - safeMargin
-            
-            val requestedOffset = dpToPx(panelPrefs.handleVerticalOffset)
-            y = requestedOffset.coerceIn(-maxOffset, maxOffset)
-            
-            // Log.d(TAG, "Handle Params: width=$width, height=$height, y=$y (requested=$requestedOffset, max=$maxOffset)")
+            y = winY
         }
 
+        edgeHandleView?.pillTopInWindow = requestedOffset - winY + (zoneH - pillH) / 2
         windowManager.addView(edgeHandleView, params)
     }
 
