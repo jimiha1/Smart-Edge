@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.dynamicanimation.animation.SpringAnimation
+import android.graphics.Canvas
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.recyclerview.widget.GridLayoutManager
 import com.imi.smartedge.sidebar.panel.databinding.SidePanelLayoutBinding
@@ -147,13 +148,24 @@ class SidePanelView @JvmOverloads constructor(
             }
         })
 
-        val itemTouchHelper = androidx.recyclerview.widget.ItemTouchHelper(object : androidx.recyclerview.widget.ItemTouchHelper.SimpleCallback(
-            androidx.recyclerview.widget.ItemTouchHelper.UP or androidx.recyclerview.widget.ItemTouchHelper.DOWN or 
+        var escalatedToSystemDrag = false
+
+        val itemTouchCallback = object : androidx.recyclerview.widget.ItemTouchHelper.SimpleCallback(
+            androidx.recyclerview.widget.ItemTouchHelper.UP or androidx.recyclerview.widget.ItemTouchHelper.DOWN or
             androidx.recyclerview.widget.ItemTouchHelper.LEFT or androidx.recyclerview.widget.ItemTouchHelper.RIGHT,
             0
         ) {
             override fun isLongPressDragEnabled(): Boolean {
-                return adapter.isEditMode
+                return true
+            }
+
+            override fun getMovementFlags(
+                recyclerView: androidx.recyclerview.widget.RecyclerView,
+                viewHolder: androidx.recyclerview.widget.RecyclerView.ViewHolder
+            ): Int {
+                // The trailing add/edit cell never drags
+                if (viewHolder is PanelAppsAdapter.AddViewHolder) return 0
+                return super.getMovementFlags(recyclerView, viewHolder)
             }
 
             override fun onMove(
@@ -164,30 +176,70 @@ class SidePanelView @JvmOverloads constructor(
                 if (viewHolder is PanelAppsAdapter.AddViewHolder) return false
                 val from = viewHolder.bindingAdapterPosition
                 var to = target.bindingAdapterPosition
-                
+
                 if (target is PanelAppsAdapter.AddViewHolder) {
                     // Snap to the last available app position
                     to = adapter.itemCount - 2
                 }
-                
+
                 if (from == androidx.recyclerview.widget.RecyclerView.NO_POSITION || to == androidx.recyclerview.widget.RecyclerView.NO_POSITION) return false
                 if (from == to) return false
-                
+
                 adapter.moveItem(from, to)
                 return true
             }
 
             override fun onSwiped(viewHolder: androidx.recyclerview.widget.RecyclerView.ViewHolder, direction: Int) {}
 
+            override fun onChildDraw(
+                c: Canvas,
+                recyclerView: androidx.recyclerview.widget.RecyclerView,
+                viewHolder: androidx.recyclerview.widget.RecyclerView.ViewHolder,
+                dX: Float,
+                dY: Float,
+                actionState: Int,
+                isCurrentlyActive: Boolean
+            ) {
+                super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive)
+
+                // Dragging far outside the list escalates to the system drag-and-drop,
+                // which offers the split-screen / freeform drop zones.
+                if (!isCurrentlyActive || escalatedToSystemDrag) return
+                if (!panelPrefs.dragToSplit) return
+                val item = viewHolder.itemView
+                val outMargin = 40 * context.resources.displayMetrics.density
+                val outside = item.left < -outMargin || item.top < -outMargin ||
+                        item.right > recyclerView.width + outMargin || item.bottom > recyclerView.height + outMargin
+                if (!outside) return
+
+                val pos = viewHolder.bindingAdapterPosition
+                if (pos == androidx.recyclerview.widget.RecyclerView.NO_POSITION) return
+                val app = adapter.getApps().getOrNull(pos) ?: return
+
+                escalatedToSystemDrag = true
+                if (panelPrefs.hapticEnabled) {
+                    item.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                }
+                val clipData = android.content.ClipData.newPlainText("pkg", app.packageName)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                    item.startDragAndDrop(clipData, View.DragShadowBuilder(item), app.packageName, 0)
+                } else {
+                    @Suppress("DEPRECATION")
+                    item.startDrag(clipData, View.DragShadowBuilder(item), app.packageName, 0)
+                }
+            }
+
             override fun clearView(recyclerView: androidx.recyclerview.widget.RecyclerView, viewHolder: androidx.recyclerview.widget.RecyclerView.ViewHolder) {
                 super.clearView(recyclerView, viewHolder)
+                escalatedToSystemDrag = false
                 val apps = adapter.getApps()
                 val identifiers = apps.map { it.identifier }
-                
+
                 panelPrefs.setPanelApps(identifiers)
                 updateSideLayout()
             }
-        })
+        }
+        val itemTouchHelper = androidx.recyclerview.widget.ItemTouchHelper(itemTouchCallback)
         itemTouchHelper.attachToRecyclerView(binding.rvPanelApps)
 
         updateSideLayout()
