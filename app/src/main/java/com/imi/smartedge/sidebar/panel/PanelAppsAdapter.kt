@@ -300,33 +300,9 @@ class PanelAppsAdapter(
                 }
             }
 
-            holder.itemView.setOnLongClickListener {
-                if (isEditMode) {
-                    return@setOnLongClickListener false // Let ItemTouchHelper handle it
-                }
-
-                if (!panelPrefs.dragToSplit) {
-                    // Do nothing if drag-to-split is disabled and we're not in edit mode
-                    return@setOnLongClickListener true
-                }
-
-                // Drag to Split Logic
-                if (panelPrefs.hapticEnabled) {
-                    holder.itemView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                }
-                
-                val clipData = android.content.ClipData.newPlainText("pkg", app.packageName)
-                val shadow = View.DragShadowBuilder(holder.ivIcon)
-                
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-                    holder.itemView.startDragAndDrop(clipData, shadow, app.packageName, 0)
-                } else {
-                    @Suppress("DEPRECATION")
-                    holder.itemView.startDrag(clipData, shadow, app.packageName, 0)
-                }
-                
-                true
-            }
+            // Long-press drag (reorder / escalate to system drag) is handled
+            // entirely by the ItemTouchHelper attached in SidePanelView; no
+            // OnLongClickListener here so it never consumes the gesture.
         } else if (holder is AddViewHolder) {
             val baseIconSize = 48
             holder.ivAdd.layoutParams.let { lp ->
