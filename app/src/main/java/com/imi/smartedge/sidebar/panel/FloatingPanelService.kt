@@ -263,14 +263,21 @@ class FloatingPanelService : Service() {
                     }
                     val isLandscape = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
                     val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()
+                    // Any known non-launcher window being active (biometric
+                    // prompts hosted by systemui or pkg-"android", keyguard)
+                    // must hide the handle even though fg still says launcher.
+                    // The shade keeps the launcher as the active window (verified
+                    // in logs), so this does not affect it.
+                    val activeNotLauncher = activeWindowNotLauncher()
                     val shouldShowHandle = if (isLandscape && !panelPrefs.showInLandscape) false
-                                          else if (!isLauncher) false
+                                          else if (!isLauncher || activeNotLauncher) false
                                           else true
                     DebugLog.i(
                         TAG,
                         "refresh handle=$shouldShowHandle landscape=$isLandscape " +
                             "onlyOnHome=${panelPrefs.onlyOnHome} isLauncher=$isLauncher " +
-                            "imeVis=$isImeVisible fg=${panelPrefs.currentForegroundPackage}"
+                            "imeVis=$isImeVisible active=${PanelAccessibilityService.lastActiveWindowPkg} " +
+                            "fg=${panelPrefs.currentForegroundPackage}"
                     )
 
                     if (!shouldShowHandle) {
@@ -537,6 +544,47 @@ class FloatingPanelService : Service() {
         return by != "none"
     }
 
+    /**
+     * Whether [pkg] is a home-screen package. FallbackHome (a provisioning stub
+     * inside Settings) is excluded, otherwise the Settings app would count as
+     * "on the home screen". Shared by the foreground check above and the
+     * openPanel active-window guard.
+     */
+    private fun isPackageLauncher(pkg: String): Boolean {
+        if (pkg.isEmpty()) return true
+        val intent = Intent(Intent.ACTION_MAIN).apply {
+            addCategory(Intent.CATEGORY_HOME)
+        }
+        val homePkg = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName
+        if (pkg == homePkg) return true
+        val allLaunchers = packageManager.queryIntentActivities(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            .filter { it.activityInfo.name != "com.android.settings.FallbackHome" }
+            .map { it.activityInfo.packageName }
+        return allLaunchers.contains(pkg)
+    }
+
+    /**
+     * True when the window the system currently considers active belongs to
+     * anything other than us or a home-screen package. Biometric unlock
+     * prompts (hosted by pkg-"android" or systemui depending on the launch
+     * path), keyguard and foreign apps all count — the panel must neither
+     * show its handle nor open over them while onlyOnHome is active.
+     *
+     * While the accessibility service runs but its window list is unusable
+     * (secure overlays hide every window), the snapshot is NULL: treat that
+     * as "not on the launcher" too (fail closed) — the launcher emits noise
+     * events behind biometric prompts, so an unknown reading must never
+     * re-show the handle. When the accessibility service isn't running at
+     * all (automation-engine-only setups), there is no snapshot to trust:
+     * keep the legacy foreground-pref-only behaviour.
+     */
+    private fun activeWindowNotLauncher(): Boolean {
+        if (!PanelAccessibilityService.isRunning) return false
+        val active = PanelAccessibilityService.lastActiveWindowPkg ?: return true
+        return active != packageName && !isPackageLauncher(active)
+    }
+
     private fun addNotchHandle() {
         Log.d(TAG, "addNotchHandle called. Enabled: ${panelPrefs.notchGesturesEnabled}")
         if (!panelPrefs.notchGesturesEnabled) {
@@ -587,13 +635,15 @@ class FloatingPanelService : Service() {
         val hasActiveEngine = isAccessibilityServiceEnabled() || (panelPrefs.useAutomationForGestures && AutomationManager.isAutomationPossible())
 
         val isLauncher = !panelPrefs.onlyOnHome || isCurrentPackageLauncher()
+        val activeNotLauncher = activeWindowNotLauncher()
         DebugLog.i(
             TAG,
             "handle gates: onlyOnHome=${panelPrefs.onlyOnHome} triggers=$anyTriggerEnabled isLauncher=$isLauncher " +
-                "engine=$hasActiveEngine imeVis=$isImeVisible fg=${panelPrefs.currentForegroundPackage} => " +
-                if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible) "HIDE" else "SHOW"
+                "engine=$hasActiveEngine imeVis=$isImeVisible active=${PanelAccessibilityService.lastActiveWindowPkg} " +
+                "fg=${panelPrefs.currentForegroundPackage} => " +
+                if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible || activeNotLauncher) "HIDE" else "SHOW"
         )
-        if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible) {
+        if (!anyTriggerEnabled || !isLauncher || !hasActiveEngine || isImeVisible || activeNotLauncher) {
             removeView(edgeHandleView)
             edgeHandleView = null
             return
@@ -605,12 +655,6 @@ class FloatingPanelService : Service() {
         if (edgeHandleView != null && !forceRecreate) {
             val params = edgeHandleView?.layoutParams as? WindowManager.LayoutParams
             if (params != null) {
-                // 1. Update gravity if side changed
-                val newGravity = if (isRight) Gravity.END or Gravity.CENTER_VERTICAL
-                                 else Gravity.START or Gravity.CENTER_VERTICAL
-                params.gravity = newGravity
-
-                // 2. Update size and position
                 val density = resources.displayMetrics.density
                 val screenH = resources.displayMetrics.heightPixels
                 val safeMargin = (10 * density).toInt()
@@ -619,14 +663,27 @@ class FloatingPanelService : Service() {
                 val h = (panelPrefs.handleHeight * density).toInt()
                 val maxOffset = (screenH / 2) - (h / 2) - safeMargin
 
-                params.width = (panelPrefs.handleWidth * density).toInt()
-                params.height = h
-                params.y = (panelPrefs.handleVerticalOffset * density).toInt().coerceIn(-maxOffset, maxOffset)
+                val newGravity = if (isRight) Gravity.END or Gravity.CENTER_VERTICAL
+                                 else Gravity.START or Gravity.CENTER_VERTICAL
+                val newW = (panelPrefs.handleWidth * density).toInt()
+                val newY = (panelPrefs.handleVerticalOffset * density).toInt().coerceIn(-maxOffset, maxOffset)
+
+                // Relayout while the user is touching the handle cancels the
+                // in-flight gesture (ACTION_CANCEL) — refresh storms right
+                // after the panel closes made the strip feel dead for seconds.
+                // Only touch WindowManager when a value actually changed.
+                if (params.gravity != newGravity || params.width != newW ||
+                    params.height != h || params.y != newY
+                ) {
+                    params.gravity = newGravity
+                    params.width = newW
+                    params.height = h
+                    params.y = newY
+                    try {
+                        windowManager.updateViewLayout(edgeHandleView, params)
+                    } catch (e: Exception) {}
+                }
                 edgeHandleView?.pillTopInWindow = 0
-                
-                try {
-                    windowManager.updateViewLayout(edgeHandleView, params)
-                } catch (e: Exception) {}
             }
             
             edgeHandleView?.updateState(
@@ -643,9 +700,9 @@ class FloatingPanelService : Service() {
 
         edgeHandleView = EdgeHandleView(this).apply {
             onTrigger = {
-                refreshApps {
-                    openPanel()
-                }
+                // openPanel() refreshes apps in the background itself — waiting
+                // for the refresh here delayed the open animation.
+                openPanel()
             }
             onAdjustBrightness = { delta ->
                 adjustBrightness(delta)
@@ -922,6 +979,26 @@ class FloatingPanelService : Service() {
 
     private fun openPanel() {
         if (isPanelOpen || !panelPrefs.serviceEnabled) return
+        if (panelPrefs.onlyOnHome && PanelAccessibilityService.isRunning) {
+            // The tracked foreground only updates on app window events, and the
+            // active-window snapshot goes NULL while secure overlays (biometric
+            // prompts) hide the window list — the launcher emits noise events
+            // during that gap. Only open when the active window is POSITIVELY
+            // a launcher window; unknown (null) or any other package refuses.
+            val active = PanelAccessibilityService.lastActiveWindowPkg
+            if (active == null || (active != packageName && !isPackageLauncher(active))) {
+                DebugLog.i(TAG, "openPanel blocked active=$active fg=${panelPrefs.currentForegroundPackage}")
+                // A non-null non-launcher active window means the handle is
+                // stale (fg still says launcher) — drop it so the strip stops
+                // triggering until the next refresh re-evaluates. On null keep
+                // the view; the state is transient and refresh will resolve it.
+                if (active != null) {
+                    removeView(edgeHandleView)
+                    edgeHandleView = null
+                }
+                return
+            }
+        }
         isPanelOpen = true
         refreshApps() // Load apps in background while panel opens
         initRootLayout()
@@ -1000,6 +1077,11 @@ class FloatingPanelService : Service() {
 
         if (isPickerOpen) closePicker()
         sidePanelView?.let { panel ->
+            // Restore the handle NOW, not when the spring settles — the panel
+            // slides over it, and the edge must stay grabbable the instant the
+            // close starts (the spring end listener can fire hundreds of ms
+            // after the visual end, which felt like a dead zone after closing).
+            edgeHandleView?.visibility = View.VISIBLE
             val isRight = panelPrefs.panelSide == PanelPreferences.SIDE_RIGHT
             val panelWidth = panel.width.toFloat()
             val stiffness = panelPrefs.animSpeed.toFloat()
@@ -1009,7 +1091,6 @@ class FloatingPanelService : Service() {
                 if (rootLayout?.parent != null) {
                     try { windowManager.removeView(rootLayout) } catch (e: Exception) {}
                 }
-                edgeHandleView?.visibility = View.VISIBLE
                 panel.animatePickerToggle(false) 
                 
                 // If service is NOT enabled in prefs, stop it now (Test mode over)

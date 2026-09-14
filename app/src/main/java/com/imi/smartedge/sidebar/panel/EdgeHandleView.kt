@@ -69,6 +69,7 @@ class EdgeHandleView @JvmOverloads constructor(
     private val density = resources.displayMetrics.density
     private val triggerThreshold = 16 * density
     private val holdDurationMs = 250L
+    private companion object { private const val TAG = "EdgeHandle" }
 
     // Inner pill visual; the window itself is the (taller) unified touch zone
     private val pillView = View(context)
@@ -344,6 +345,7 @@ class EdgeHandleView @JvmOverloads constructor(
 
                     if (!isSlidingSeek && absDyFromStart > triggerThreshold / 2 && absDyFromStart > absDx * 2) {
                         // Volume/Brightness takes priority OVER the open-panel gesture
+                        DebugLog.i(TAG, "captured as slide-seek dy=${absDyFromStart.toInt()} dx=${absDx.toInt()}")
                         val volumeOn = panelPrefs.slideVolumeEnabled
                         val brightnessOn = panelPrefs.slideBrightnessEnabled
                         
@@ -438,6 +440,9 @@ class EdgeHandleView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (event.action == MotionEvent.ACTION_CANCEL) {
+                    DebugLog.i(TAG, "touch cancel pass=$hasPassedThreshold seek=$isSlidingSeek triggered=$isTriggered")
+                }
                 handler.removeCallbacks(holdRunnable)
                 handler.removeCallbacks(longPressRunnable)
 

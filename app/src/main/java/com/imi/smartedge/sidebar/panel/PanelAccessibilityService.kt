@@ -69,6 +69,19 @@ class PanelAccessibilityService : AccessibilityService() {
         @Volatile
         var isRunning = false
             private set
+
+        /**
+         * Package of the window the system considers active, as of the most
+         * recent TYPE_WINDOW_STATE_CHANGED event (null = never seen / unbound).
+         * Unlike [PanelPreferences.currentForegroundPackage] this snapshot also
+         * covers system-attributed windows (biometric prompts and other
+         * pkg-"android" dialogs), so the panel service can reject handle
+         * triggers that fire while such a dialog is actually on top even
+         * though the tracked foreground still says "launcher".
+         */
+        @Volatile
+        var lastActiveWindowPkg: String? = null
+            private set
     }
 
     // --- IME visibility tracking ---
@@ -170,7 +183,19 @@ class PanelAccessibilityService : AccessibilityService() {
         if (pkg !in cachedLauncherPkgs) return
         if (now - lastLauncherContentRefresh < 800) return
         lastLauncherContentRefresh = now
-        DebugLog.i(TAG, "launcherContent pkg=$pkg refreshSent=true")
+
+        // Launcher content events fire every second or two even on an idle
+        // home screen, while TYPE_WINDOW_STATE_CHANGED may not fire for
+        // minutes — re-read the active window here so the snapshot (and thus
+        // the fail-closed gates) self-heal quickly after service rebinds.
+        // Under secure overlays (biometric prompts) the read stays null, so
+        // the handle correctly remains hidden for the duration.
+        val activePkg = authoritativeForeground()
+        lastActiveWindowPkg = activePkg
+        if (activePkg != null && activePkg in cachedLauncherPkgs) {
+            panelPrefs.currentForegroundPackage = activePkg
+        }
+        DebugLog.i(TAG, "launcherContent pkg=$pkg active=$activePkg refreshSent=true")
         val refresh = Intent(this, FloatingPanelService::class.java).apply {
             action = FloatingPanelService.ACTION_REFRESH
         }
@@ -180,6 +205,7 @@ class PanelAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
+        lastActiveWindowPkg = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -316,7 +342,6 @@ class PanelAccessibilityService : AccessibilityService() {
             // foreground back to the launcher.
             val activePkg = authoritativeForeground()
             val packageName = activePkg ?: eventPkg
-
             val myPkg = this@PanelAccessibilityService.packageName
             val isSystemPkg = packageName == "android" || packageName == "com.android.systemui"
             val isImePkg = packageName in enabledImePackages()
@@ -341,23 +366,42 @@ class PanelAccessibilityService : AccessibilityService() {
                         " fgChange=${panelPrefs.currentForegroundPackage}->$packageName" else "")
             )
 
-            if (filter == "app") {
-                panelPrefs.currentForegroundPackage = packageName
+            // Snapshot only what the system's own window list reports. When the
+            // list is unusable (secure overlays — biometric prompts hide every
+            // window from accessibility) keep NULL instead of falling back to
+            // the event package: the launcher fires noise events while such a
+            // dialog is up (verified on-device 2026-09-14 15:07), and the
+            // fallback poisoned the snapshot to "launcher", re-showing the
+            // handle over Bitwarden's unlock UI. NULL makes the panel-side
+            // gates fail closed (hide handle, refuse to open).
+            lastActiveWindowPkg = activePkg
+
+            // Same reason for the foreground write: with the window list
+            // unusable the event package is untrustworthy (launcher noise), so
+            // keep the previous tracked foreground until a real reading exists.
+            if (activePkg != null && filter == "app") {
+                panelPrefs.currentForegroundPackage = activePkg
             }
 
-            if (filter == "app") {
-                if (panelPrefs.serviceEnabled) {
+            // System-classified windows (biometric unlock prompts, keyguard and
+            // other systemui overlays) also matter to the onlyOnHome gates: the
+            // tracked fg may still say "launcher" while one of them is the
+            // active window — the launched app's own window event only arrives
+            // once the dialog resolves. Push a refresh and let the service
+            // decide from the active-window snapshot whether to hide the handle.
+            if (panelPrefs.serviceEnabled && (filter == "app" || filter == "system")) {
+                if (filter == "app") {
                     val closeIntent = Intent(this, FloatingPanelService::class.java).apply {
                         action = FloatingPanelService.ACTION_CLOSE_PANEL
                     }
                     startService(closeIntent)
-
-                    // Notify service to update game mode state based on new foreground package
-                    val refreshIntent = Intent(this, FloatingPanelService::class.java).apply {
-                        action = FloatingPanelService.ACTION_REFRESH
-                    }
-                    startService(refreshIntent)
                 }
+
+                // Notify service to update game mode state based on new foreground package
+                val refreshIntent = Intent(this, FloatingPanelService::class.java).apply {
+                    action = FloatingPanelService.ACTION_REFRESH
+                }
+                startService(refreshIntent)
             }
         }
         
@@ -372,6 +416,7 @@ class PanelAccessibilityService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         isRunning = false
+        lastActiveWindowPkg = null
         val stopIntent = Intent(this, FloatingPanelService::class.java).apply {
             action = FloatingPanelService.ACTION_STOP
         }
