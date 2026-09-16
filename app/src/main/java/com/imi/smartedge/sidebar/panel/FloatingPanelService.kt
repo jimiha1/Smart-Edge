@@ -1225,13 +1225,14 @@ class FloatingPanelService : Service() {
                 }
             } else {
                 val baseApps = repository.getPanelApps().toMutableList()
-                
-                // Add "Tools" folder button at the top if enabled
+
+                // The Tools button is injected below, never user-pinned — but drag-
+                // reorder saves the displayed list, so it can lurk in the stored list
+                // and outlive its toggle. Always strip it before re-injecting.
+                baseApps.removeAll { it.identifier == "smartedge.tool.tools" }
+
                 if (panelPrefs.showToolsPanelButton) {
-                    val toolsBtn = AppInfo("smartedge.tool.tools", "Tools", type = AppInfo.Type.TOOL)
-                    if (baseApps.none { it.identifier == toolsBtn.identifier }) {
-                        baseApps.add(0, toolsBtn)
-                    }
+                    baseApps.add(0, AppInfo("smartedge.tool.tools", "Tools", type = AppInfo.Type.TOOL))
                 }
                 
                 baseApps

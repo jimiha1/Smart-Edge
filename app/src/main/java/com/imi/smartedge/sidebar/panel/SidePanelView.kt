@@ -233,7 +233,8 @@ class SidePanelView @JvmOverloads constructor(
                 super.clearView(recyclerView, viewHolder)
                 escalatedToSystemDrag = false
                 val apps = adapter.getApps()
-                val identifiers = apps.map { it.identifier }
+                // Never persist the auto-injected Tools button — only real user pins
+                val identifiers = apps.map { it.identifier }.filterNot { it == "smartedge.tool.tools" }
 
                 panelPrefs.setPanelApps(identifiers)
                 updateSideLayout()
